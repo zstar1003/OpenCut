@@ -1,6 +1,5 @@
 "use client";
 
-import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
 import {
   Scissors,
@@ -199,157 +198,85 @@ export function Timeline() {
       !target.closest("[data-track-labels]");
 
     if (isTimelineBackground) {
+      const now = Date.now();
       mouseTrackingRef.current = {
         isMouseDown: true,
         downX: e.clientX,
         downY: e.clientY,
-        downTime: e.timeStamp,
+        downTime: now,
       };
     }
   }, []);
 
-  // Timeline content click to seek handler
-  const handleTimelineContentClick = useCallback(
-    (e: React.MouseEvent) => {
-      const { isMouseDown, downX, downY, downTime } = mouseTrackingRef.current;
-
-      // Reset mouse tracking
-      mouseTrackingRef.current = {
-        isMouseDown: false,
-        downX: 0,
-        downY: 0,
-        downTime: 0,
-      };
-
-      // Only process as click if we tracked a mouse down on timeline background
-      if (!isMouseDown) {
-        console.log(
-          JSON.stringify({
-            ignoredClickWithoutMouseDown: true,
-            timeStamp: e.timeStamp,
-          })
-        );
-        return;
-      }
-
-      // Check if mouse moved significantly (indicates drag, not click)
-      const deltaX = Math.abs(e.clientX - downX);
-      const deltaY = Math.abs(e.clientY - downY);
-      const deltaTime = e.timeStamp - downTime;
-
-      if (deltaX > 5 || deltaY > 5 || deltaTime > 500) {
-        console.log(
-          JSON.stringify({
-            ignoredDragNotClick: true,
-            deltaX,
-            deltaY,
-            deltaTime,
-            timeStamp: e.timeStamp,
-          })
-        );
-        return;
-      }
-
-      // Don't seek if this was a selection box operation
-      if (isSelecting || justFinishedSelecting) {
-        return;
-      }
-
-      // Don't seek if clicking on timeline elements, but still deselect
-      if ((e.target as HTMLElement).closest(".timeline-element")) {
-        return;
-      }
-
-      // Don't seek if clicking on playhead
-      if (playheadRef.current?.contains(e.target as Node)) {
-        return;
-      }
-
-      // Don't seek if clicking on track labels
-      if ((e.target as HTMLElement).closest("[data-track-labels]")) {
-        clearSelectedElements();
-        return;
-      }
-
-      // Clear selected elements when clicking empty timeline area
-      console.log(JSON.stringify({ clearingSelectedElements: true }));
-      clearSelectedElements();
-
-      // Determine if we're clicking in ruler or tracks area
-      const isRulerClick = (e.target as HTMLElement).closest(
-        "[data-ruler-area]"
-      );
-
-      let mouseX: number;
-      let scrollLeft = 0;
-
-      if (isRulerClick) {
-        // Calculate based on ruler position
-        const rulerContent = rulerScrollRef.current?.querySelector(
-          "[data-radix-scroll-area-viewport]"
-        ) as HTMLElement;
-        if (!rulerContent) return;
-        const rect = rulerContent.getBoundingClientRect();
-        mouseX = e.clientX - rect.left;
-        scrollLeft = rulerContent.scrollLeft;
-      } else {
-        // Calculate based on tracks content position
-        const tracksContent = tracksScrollRef.current?.querySelector(
-          "[data-radix-scroll-area-viewport]"
-        ) as HTMLElement;
-        if (!tracksContent) return;
-        const rect = tracksContent.getBoundingClientRect();
-        mouseX = e.clientX - rect.left;
-        scrollLeft = tracksContent.scrollLeft;
-      }
-
-      const rawTime = Math.max(
-        0,
-        Math.min(
-          duration,
-          (mouseX + scrollLeft) /
-            (TIMELINE_CONSTANTS.PIXELS_PER_SECOND * zoomLevel)
-        )
-      );
-
-      // Use frame snapping for timeline clicking
-      const projectFps = activeProject?.fps || 30;
-      const time = snapTimeToFrame(rawTime, projectFps);
-
-      seek(time);
-    },
-    [
-      duration,
-      zoomLevel,
-      seek,
-      rulerScrollRef,
-      tracksScrollRef,
-      clearSelectedElements,
-      isSelecting,
-      justFinishedSelecting,
-    ]
-  );
-
-  // Update timeline duration when tracks change
+  // Track mouse up globally to reset mouse tracking
   useEffect(() => {
-    const totalDuration = getTotalDuration();
-    setDuration(Math.max(totalDuration, 10)); // Minimum 10 seconds for empty timeline
-  }, [tracks, setDuration, getTotalDuration]);
+    const handleGlobalMouseUp = () => {
+      mouseTrackingRef.current.isMouseDown = false;
+    };
 
-  // Old marquee system removed - using new SelectionBox component instead
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []);
 
-  const handleDragEnter = (e: React.DragEvent) => {
-    // When something is dragged over the timeline, show overlay
+  // Handle clicks on timeline content (not playhead/ruler)
+  const handleTimelineContentClick = useCallback((e: React.MouseEvent) => {
+    // Only handle clicks if we didn't move much (distinguishing from drag end)
+    const { isMouseDown, downX, downY, downTime } = mouseTrackingRef.current;
+    const now = Date.now();
+    const distance = Math.sqrt(
+      Math.pow(e.clientX - downX, 2) + Math.pow(e.clientY - downY, 2)
+    );
+
+    // Not a real click if:
+    // - Mouse wasn't pressed down in timeline background
+    // - Too much movement (likely drag end)
+    // - Too much time passed (likely hold or slow drag)
+    if (!isMouseDown || distance > 5 || now - downTime > 300) {
+      return;
+    }
+
+    // Only proceed if we're not currently selecting and didn't just finish selecting
+    if (isSelecting || justFinishedSelecting) {
+      return;
+    }
+
+    // Get timeline content element and click position
+    const timelineContent = e.currentTarget as HTMLElement;
+    const rect = timelineContent.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+
+    // Convert click position to time
+    const timeFromClick =
+      clickX / (TIMELINE_CONSTANTS.PIXELS_PER_SECOND * zoomLevel);
+
+    // Snap to frame boundary for accurate seeking
+    const snappedTime = snapTimeToFrame(timeFromClick);
+
+    // Seek to the clicked time
+    seek(Math.max(0, snappedTime));
+  }, [zoomLevel, seek, isSelecting, justFinishedSelecting]);
+
+  // Drag and drop handlers for adding media to timeline
+  const dragProps = {
+    onDragEnter: handleDragEnter,
+    onDragOver: handleDragOver,
+    onDragLeave: handleDragLeave,
+    onDrop: handleDrop,
+  };
+
+  function handleDragEnter(e: React.DragEvent) {
     e.preventDefault();
-    // Don't show overlay for timeline elements - they're handled by tracks
+
+    // Don't update state for timeline elements - they're handled by tracks
     if (e.dataTransfer.types.includes("application/x-timeline-element")) {
       return;
     }
+
     dragCounterRef.current += 1;
-    if (!isDragOver) {
+    if (dragCounterRef.current === 1) {
       setIsDragOver(true);
     }
-  };
+  }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -401,41 +328,87 @@ export function Timeline() {
             return;
           }
 
-          useTimelineStore.getState().addMediaToNewTrack(mediaItem);
-        }
-      } catch (error) {
-        console.error("Error parsing dropped item data:", error);
-        toast.error("Failed to add item to timeline");
-      }
-    } else if (e.dataTransfer.files?.length > 0) {
-      // Handle file drops by creating new tracks
-      if (!activeProject) {
-        toast.error("No active project");
-        return;
-      }
-
-      setIsProcessing(true);
-      setProgress(0);
-      try {
-        const processedItems = await processMediaFiles(
-          e.dataTransfer.files,
-          (p) => setProgress(p)
-        );
-        for (const processedItem of processedItems) {
-          await addMediaItem(activeProject.id, processedItem);
-          const currentMediaItems = useMediaStore.getState().mediaItems;
-          const addedItem = currentMediaItems.find(
-            (item) =>
-              item.name === processedItem.name && item.url === processedItem.url
+          // Add to first available track or create new one
+          const targetTrack = tracks.find(
+            (track) => track.type === "media" && track.elements.length === 0
           );
-          if (addedItem) {
-            useTimelineStore.getState().addMediaToNewTrack(addedItem);
+
+          if (targetTrack) {
+            await addElementToTrack(targetTrack.id, {
+              id: crypto.randomUUID(),
+              type: "media",
+              mediaId: mediaItem.id,
+              startTime: 0,
+              duration: mediaItem.duration,
+              trimStart: 0,
+              trimEnd: 0,
+            });
+          } else {
+            const trackId = crypto.randomUUID();
+            addTrack({
+              id: trackId,
+              type: "media",
+              name: `Track ${tracks.length + 1}`,
+              elements: [],
+              muted: false,
+              volume: 1,
+            });
+            await addElementToTrack(trackId, {
+              id: crypto.randomUUID(),
+              type: "media",
+              mediaId: mediaItem.id,
+              startTime: 0,
+              duration: mediaItem.duration,
+              trimStart: 0,
+              trimEnd: 0,
+            });
           }
         }
       } catch (error) {
-        // Show error if file processing fails
-        console.error("Error processing external files:", error);
-        toast.error("Failed to process dropped files");
+        console.error("Error parsing drag data:", error);
+        toast.error("Failed to add media to timeline");
+      }
+      return;
+    }
+
+    // Handle file drops (e.g., from desktop)
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      setIsProcessing(true);
+      setProgress(0);
+      try {
+        const processedMedia = await processMediaFiles(files, (progress) => {
+          setProgress(progress);
+        });
+
+        for (const media of processedMedia) {
+          addMediaItem(media);
+
+          // Add to timeline automatically
+          const trackId = crypto.randomUUID();
+          addTrack({
+            id: trackId,
+            type: "media",
+            name: `Track ${tracks.length + 1}`,
+            elements: [],
+            muted: false,
+            volume: 1,
+          });
+          await addElementToTrack(trackId, {
+            id: crypto.randomUUID(),
+            type: "media",
+            mediaId: media.id,
+            startTime: 0,
+            duration: media.duration,
+            trimStart: 0,
+            trimEnd: 0,
+          });
+        }
+
+        toast.success(`Added ${processedMedia.length} media files to timeline`);
+      } catch (error) {
+        console.error("Error processing dropped files:", error);
+        toast.error("Failed to process some files");
       } finally {
         setIsProcessing(false);
         setProgress(0);
@@ -443,90 +416,44 @@ export function Timeline() {
     }
   };
 
-  const dragProps = {
-    onDragEnter: handleDragEnter,
-    onDragOver: handleDragOver,
-    onDragLeave: handleDragLeave,
-    onDrop: handleDrop,
-  };
+  // Keyboard shortcuts for timeline actions
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when timeline is focused or no input is focused
+      const isInputFocused = document.activeElement?.tagName.match(/INPUT|TEXTAREA|SELECT/);
+      if (isInputFocused) return;
 
-  // Action handlers for toolbar
-  const handleSplitSelected = () => {
-    if (selectedElements.length === 0) {
-      toast.error("No elements selected");
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleDeleteSelected();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedElements, rippleEditingEnabled]);
+
+  // Context menu handlers
+  const handleSplitElement = () => {
+    if (selectedElements.length !== 1) {
+      toast.error("Select exactly one element to split");
       return;
     }
-    let splitCount = 0;
-    selectedElements.forEach(({ trackId, elementId }) => {
-      const track = tracks.find((t) => t.id === trackId);
-      const element = track?.elements.find((c) => c.id === elementId);
-      if (element && track) {
-        const effectiveStart = element.startTime;
-        const effectiveEnd =
-          element.startTime +
-          (element.duration - element.trimStart - element.trimEnd);
-
-        if (currentTime > effectiveStart && currentTime < effectiveEnd) {
-          const newElementId = splitElement(trackId, elementId, currentTime);
-          if (newElementId) splitCount++;
-        }
-      }
-    });
-    if (splitCount === 0) {
-      toast.error("Playhead must be within selected elements to split");
-    }
-  };
-
-  const handleDuplicateSelected = () => {
-    if (selectedElements.length === 0) {
-      toast.error("No elements selected");
-      return;
-    }
-    const canDuplicate = selectedElements.length === 1;
-    if (!canDuplicate) return;
-
-    const newSelections: { trackId: string; elementId: string }[] = [];
-
-    selectedElements.forEach(({ trackId, elementId }) => {
-      const track = tracks.find((t) => t.id === trackId);
-      const element = track?.elements.find((el) => el.id === elementId);
-
-      if (element) {
-        const newStartTime =
-          element.startTime +
-          (element.duration - element.trimStart - element.trimEnd) +
-          0.1;
-
-        // Create element without id (will be generated by store)
-        const { id, ...elementWithoutId } = element;
-
-        addElementToTrack(trackId, {
-          ...elementWithoutId,
-          startTime: newStartTime,
-        });
-
-        // We can't predict the new id, so just clear selection for now
-        // TODO: addElementToTrack could return the new element id
-      }
-    });
-
-    clearSelectedElements();
-  };
-
-  const handleFreezeSelected = () => {
-    toast.info("Freeze frame functionality coming soon!");
+    const { trackId, elementId } = selectedElements[0];
+    splitElement(trackId, elementId, currentTime);
   };
 
   const handleSplitAndKeepLeft = () => {
     if (selectedElements.length !== 1) {
-      toast.error("Select exactly one element");
+      toast.error("Select exactly one element to split");
       return;
     }
     const { trackId, elementId } = selectedElements[0];
     const track = tracks.find((t) => t.id === trackId);
-    const element = track?.elements.find((c) => c.id === elementId);
-    if (!element) return;
-    const effectiveStart = element.startTime;
+    const element = track?.elements.find((e) => e.id === elementId);
+    if (!track || !element) return;
+
+    const effectiveStart = element.startTime + element.trimStart;
     const effectiveEnd =
       element.startTime +
       (element.duration - element.trimStart - element.trimEnd);
@@ -539,14 +466,15 @@ export function Timeline() {
 
   const handleSplitAndKeepRight = () => {
     if (selectedElements.length !== 1) {
-      toast.error("Select exactly one element");
+      toast.error("Select exactly one element to split");
       return;
     }
     const { trackId, elementId } = selectedElements[0];
     const track = tracks.find((t) => t.id === trackId);
-    const element = track?.elements.find((c) => c.id === elementId);
-    if (!element) return;
-    const effectiveStart = element.startTime;
+    const element = track?.elements.find((e) => e.id === elementId);
+    if (!track || !element) return;
+
+    const effectiveStart = element.startTime + element.trimStart;
     const effectiveEnd =
       element.startTime +
       (element.duration - element.trimStart - element.trimEnd);
@@ -588,15 +516,9 @@ export function Timeline() {
 
   // --- Scroll synchronization effect ---
   useEffect(() => {
-    const rulerViewport = rulerScrollRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]"
-    ) as HTMLElement;
-    const tracksViewport = tracksScrollRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]"
-    ) as HTMLElement;
-    const trackLabelsViewport = trackLabelsScrollRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]"
-    ) as HTMLElement;
+    const rulerViewport = rulerScrollRef.current;
+    const tracksViewport = tracksScrollRef.current?.parentElement; // The container with overflow-auto
+    const trackLabelsViewport = trackLabelsScrollRef.current?.parentElement; // The container with overflow-y-auto
 
     if (!rulerViewport || !tracksViewport) return;
 
@@ -648,14 +570,8 @@ export function Timeline() {
       return () => {
         rulerViewport.removeEventListener("scroll", handleRulerScroll);
         tracksViewport.removeEventListener("scroll", handleTracksScroll);
-        trackLabelsViewport.removeEventListener(
-          "scroll",
-          handleTrackLabelsScroll
-        );
-        tracksViewport.removeEventListener(
-          "scroll",
-          handleTracksVerticalScroll
-        );
+        trackLabelsViewport.removeEventListener("scroll", handleTrackLabelsScroll);
+        tracksViewport.removeEventListener("scroll", handleTracksVerticalScroll);
       };
     }
 
@@ -698,56 +614,34 @@ export function Timeline() {
             </Tooltip>
             <div className="w-px h-6 bg-border mx-1" />
             {/* Time Display */}
-            <div
-              className="text-xs text-muted-foreground font-mono px-2"
-              style={{ minWidth: "18ch", textAlign: "center" }}
-            >
-              {currentTime.toFixed(1)}s / {duration.toFixed(1)}s
+            <div className="text-sm text-muted-foreground mr-2 font-mono">
+              {(() => {
+                const formatTime = (seconds: number) => {
+                  const h = Math.floor(seconds / 3600);
+                  const m = Math.floor((seconds % 3600) / 60);
+                  const s = Math.floor(seconds % 60);
+                  const ms = Math.floor((seconds % 1) * 100);
+                  return h > 0
+                    ? `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`
+                    : `${m}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
+                };
+                return `${formatTime(currentTime)} / ${formatTime(duration)}`;
+              })()}
             </div>
-            {/* Test Clip Button - for debugging */}
-            {tracks.length === 0 && (
-              <>
-                <div className="w-px h-6 bg-border mx-1" />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const trackId = addTrack("media");
-                        addElementToTrack(trackId, {
-                          type: "media",
-                          mediaId: "test",
-                          name: "Test Clip",
-                          duration: TIMELINE_CONSTANTS.DEFAULT_TEXT_DURATION,
-                          startTime: 0,
-                          trimStart: 0,
-                          trimEnd: 0,
-                        });
-                      }}
-                      className="text-xs"
-                    >
-                      Add Test Clip
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Add a test clip to try playback
-                  </TooltipContent>
-                </Tooltip>
-              </>
-            )}
             <div className="w-px h-6 bg-border mx-1" />
+            {/* Element Actions */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="text"
                   size="icon"
-                  onClick={handleSplitSelected}
+                  onClick={handleSplitElement}
+                  disabled={selectedElements.length !== 1}
                 >
                   <Scissors className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Split element (Ctrl+S)</TooltipContent>
+              <TooltipContent>Split element at playhead (S)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -755,11 +649,12 @@ export function Timeline() {
                   variant="text"
                   size="icon"
                   onClick={handleSplitAndKeepLeft}
+                  disabled={selectedElements.length !== 1}
                 >
                   <ArrowLeftToLine className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Split and keep left (Ctrl+Q)</TooltipContent>
+              <TooltipContent>Split and keep left part</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -767,47 +662,12 @@ export function Timeline() {
                   variant="text"
                   size="icon"
                   onClick={handleSplitAndKeepRight}
+                  disabled={selectedElements.length !== 1}
                 >
                   <ArrowRightToLine className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Split and keep right (Ctrl+W)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="text"
-                  size="icon"
-                  onClick={handleSeparateAudio}
-                >
-                  <SplitSquareHorizontal className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Separate audio (Ctrl+D)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="text"
-                  size="icon"
-                  onClick={handleDuplicateSelected}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Duplicate element (Ctrl+D)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="text"
-                  size="icon"
-                  onClick={handleFreezeSelected}
-                >
-                  <Snowflake className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Freeze frame (F)</TooltipContent>
+              <TooltipContent>Split and keep right part</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -815,38 +675,57 @@ export function Timeline() {
                   variant="text"
                   size="icon"
                   onClick={handleDeleteSelected}
+                  disabled={selectedElements.length === 0}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Delete element (Delete)</TooltipContent>
+              <TooltipContent>Delete selected elements (Del)</TooltipContent>
             </Tooltip>
-          </TooltipProvider>
-        </div>
-        <div className="flex items-center gap-1">
-          <TooltipProvider delayDuration={500}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="text" size="icon" onClick={toggleSnapping}>
-                  {snappingEnabled ? (
-                    <LockOpen className="h-4 w-4 text-primary" />
-                  ) : (
-                    <Lock className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Auto snapping</TooltipContent>
-            </Tooltip>
+            <div className="w-px h-6 bg-border mx-1" />
+            {/* Media Actions */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="text"
                   size="icon"
+                  onClick={handleSeparateAudio}
+                  disabled={
+                    selectedElements.length !== 1 ||
+                    !tracks
+                      .find((t) => t.id === selectedElements[0]?.trackId)
+                      ?.elements.find((e) => e.id === selectedElements[0]?.elementId)
+                  }
+                >
+                  <SplitSquareHorizontal className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Separate audio from video</TooltipContent>
+            </Tooltip>
+            <div className="w-px h-6 bg-border mx-1" />
+            {/* Timeline Settings */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={snappingEnabled ? "accent" : "text"}
+                  size="icon"
+                  onClick={toggleSnapping}
+                >
+                  <Snowflake className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {snappingEnabled ? "Disable Snapping" : "Enable Snapping"}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={rippleEditingEnabled ? "accent" : "text"}
+                  size="icon"
                   onClick={toggleRippleEditing}
                 >
-                  <Link
-                    className={`h-4 w-4 ${rippleEditingEnabled ? "text-primary" : ""}`}
-                  />
+                  <Link className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -991,9 +870,9 @@ export function Timeline() {
                     );
                   }).filter(Boolean);
                 })()}
+              </div>
             </div>
           </div>
-        </div>
 
         {/* Tracks Area */}
         <div className="flex-1 flex overflow-hidden">
@@ -1004,7 +883,7 @@ export function Timeline() {
               className="w-48 flex-shrink-0 border-r border-black overflow-y-auto"
               data-track-labels
             >
-              <ScrollArea
+              <div
                 ref={trackLabelsScrollRef}
                 className="w-full h-full"
               >
@@ -1026,7 +905,7 @@ export function Timeline() {
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
           )}
 
