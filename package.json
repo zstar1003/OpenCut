@@ -9,8 +9,7 @@
     "ultracite": "5.0.48"
   },
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/*"
   ],
   "scripts": {
     "dev": "turbo run dev",

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "../ui/button";
-import { ChevronDown, ArrowLeft, SquarePen, Trash } from "lucide-react";
+import { ChevronDown, SquarePen } from "lucide-react";
 import { HeaderBase } from "../header-base";
 import { useProjectStore } from "@/stores/project-store";
 import { KeyboardShortcutsHelp } from "../keyboard-shortcuts-help";
@@ -14,22 +14,26 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import Link from "next/link";
-import { RenameProjectDialog } from "../rename-project-dialog";
-import { DeleteProjectDialog } from "../delete-project-dialog";
-import { useRouter } from "next/navigation";
 import { FaDiscord } from "react-icons/fa6";
 import { PanelPresetSelector } from "./panel-preset-selector";
 import { ExportButton } from "./export-button";
 import { ThemeToggle } from "../theme-toggle";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Input } from "../ui/input";
 
 export function EditorHeader() {
-  const { activeProject, renameProject, deleteProject } = useProjectStore();
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const { activeProject, renameProject } = useProjectStore();
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
-  const router = useRouter();
+  const [newName, setNewName] = useState("");
 
-  const handleNameSave = async (newName: string) => {
-    console.log("handleNameSave", newName);
+  const handleNameSave = async () => {
     if (activeProject && newName.trim() && newName !== activeProject.name) {
       try {
         await renameProject(activeProject.id, newName.trim());
@@ -40,12 +44,9 @@ export function EditorHeader() {
     }
   };
 
-  const handleDelete = () => {
-    if (activeProject) {
-      deleteProject(activeProject.id);
-      setIsDeleteDialogOpen(false);
-      router.push("/projects");
-    }
+  const openRenameDialog = () => {
+    setNewName(activeProject?.name || "");
+    setIsRenameDialogOpen(true);
   };
 
   const leftContent = (
@@ -61,26 +62,12 @@ export function EditorHeader() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-40 z-100">
-          <Link href="/projects">
-            <DropdownMenuItem className="flex items-center gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
-              Projects
-            </DropdownMenuItem>
-          </Link>
           <DropdownMenuItem
             className="flex items-center gap-1.5"
-            onClick={() => setIsRenameDialogOpen(true)}
+            onClick={openRenameDialog}
           >
             <SquarePen className="h-4 w-4" />
             Rename project
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            className="flex items-center gap-1.5"
-            onClick={() => setIsDeleteDialogOpen(true)}
-          >
-            <Trash className="h-4 w-4" />
-            Delete Project
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
@@ -96,18 +83,33 @@ export function EditorHeader() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <RenameProjectDialog
-        isOpen={isRenameDialogOpen}
-        onOpenChange={setIsRenameDialogOpen}
-        onConfirm={handleNameSave}
-        projectName={activeProject?.name || ""}
-      />
-      <DeleteProjectDialog
-        isOpen={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        onConfirm={handleDelete}
-        projectName={activeProject?.name || ""}
-      />
+
+      <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Project</DialogTitle>
+            <DialogDescription>
+              Enter a new name for your project.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Project name"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleNameSave();
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleNameSave}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 

@@ -2,113 +2,107 @@ import { Button } from "@/components/ui/button";
 import { PropertyGroup } from "../../properties-panel/property-item";
 import { PanelBaseView as BaseView } from "@/components/editor/panel-base-view";
 import { Language, LanguageSelect } from "@/components/language-select";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { extractTimelineAudio } from "@/lib/mediabunny-utils";
-import { encryptWithRandomKey, arrayBufferToBase64 } from "@/lib/zk-encryption";
 import { useTimelineStore } from "@/stores/timeline-store";
 import { DEFAULT_TEXT_ELEMENT } from "@/constants/text-constants";
-import { Loader2, Shield, Trash2, Upload } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Loader2, Download, Cpu } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { TextElement } from "@/types/timeline";
 
 export const languages: Language[] = [
-  { code: "US", name: "English" },
-  { code: "ES", name: "Spanish" },
-  { code: "IT", name: "Italian" },
-  { code: "FR", name: "French" },
-  { code: "DE", name: "German" },
-  { code: "PT", name: "Portuguese" },
-  { code: "RU", name: "Russian" },
-  { code: "JP", name: "Japanese" },
-  { code: "CN", name: "Chinese" },
+  { code: "en", name: "English" },
+  { code: "es", name: "Spanish" },
+  { code: "it", name: "Italian" },
+  { code: "fr", name: "French" },
+  { code: "de", name: "German" },
+  { code: "pt", name: "Portuguese" },
+  { code: "ru", name: "Russian" },
+  { code: "ja", name: "Japanese" },
+  { code: "zh", name: "Chinese" },
 ];
 
-const PRIVACY_DIALOG_KEY = "opencut-transcription-privacy-accepted";
+// Singleton for transcriber to avoid reloading
+let transcriberInstance: any = null;
+let transcriberLoading = false;
+let transcriberLoadPromise: Promise<any> | null = null;
 
 export function Captions() {
   const [selectedCountry, setSelectedCountry] = useState("auto");
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const [showPrivacyDialog, setShowPrivacyDialog] = useState(false);
-  const [hasAcceptedPrivacy, setHasAcceptedPrivacy] = useState(false);
+  const [modelProgress, setModelProgress] = useState<number>(0);
+  const [isLoadingModel, setIsLoadingModel] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { insertTrackAt, addElementToTrack } = useTimelineStore();
 
-  // Check if user has already accepted privacy on mount
-  useEffect(() => {
-    const hasAccepted = localStorage.getItem(PRIVACY_DIALOG_KEY) === "true";
-    setHasAcceptedPrivacy(hasAccepted);
+  const loadTranscriber = useCallback(async () => {
+    if (transcriberInstance) {
+      return transcriberInstance;
+    }
+
+    if (transcriberLoading && transcriberLoadPromise) {
+      return transcriberLoadPromise;
+    }
+
+    transcriberLoading = true;
+    setIsLoadingModel(true);
+
+    transcriberLoadPromise = (async () => {
+      try {
+        const { pipeline } = await import("@xenova/transformers");
+
+        const transcriber = await pipeline(
+          "automatic-speech-recognition",
+          "Xenova/whisper-base",
+          {
+            progress_callback: (progress: any) => {
+              if (progress.status === "downloading") {
+                const percent = progress.progress || 0;
+                setModelProgress(Math.round(percent));
+              } else if (progress.status === "ready") {
+                setModelProgress(100);
+              }
+            },
+          }
+        );
+
+        transcriberInstance = transcriber;
+        return transcriber;
+      } finally {
+        transcriberLoading = false;
+        setIsLoadingModel(false);
+      }
+    })();
+
+    return transcriberLoadPromise;
   }, []);
 
   const handleGenerateTranscript = async () => {
     try {
       setIsProcessing(true);
       setError(null);
+      setModelProgress(0);
+
+      setProcessingStep("Loading AI model...");
+      const transcriber = await loadTranscriber();
+
       setProcessingStep("Extracting audio...");
-
       const audioBlob = await extractTimelineAudio();
-
-      setProcessingStep("Encrypting audio...");
-
-      // Encrypt the audio with a random key (zero-knowledge)
       const audioBuffer = await audioBlob.arrayBuffer();
-      const encryptionResult = await encryptWithRandomKey(audioBuffer);
-
-      // Convert encrypted data to blob for upload
-      const encryptedBlob = new Blob([encryptionResult.encryptedData]);
-
-      setProcessingStep("Uploading...");
-      const uploadResponse = await fetch("/api/get-upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileExtension: "wav" }),
-      });
-
-      if (!uploadResponse.ok) {
-        const error = await uploadResponse.json();
-        throw new Error(error.message || "Failed to get upload URL");
-      }
-
-      const { uploadUrl, fileName } = await uploadResponse.json();
-
-      // Upload to R2
-      await fetch(uploadUrl, {
-        method: "PUT",
-        body: encryptedBlob,
-      });
 
       setProcessingStep("Transcribing...");
 
-      // Call Modal transcription API with encryption parameters
-      const transcriptionResponse = await fetch("/api/transcribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: fileName,
-          language:
-            selectedCountry === "auto" ? "auto" : selectedCountry.toLowerCase(),
-          // Send the raw encryption key and IV (zero-knowledge)
-          decryptionKey: arrayBufferToBase64(encryptionResult.key),
-          iv: arrayBufferToBase64(encryptionResult.iv),
-        }),
+      const result = await transcriber(audioBuffer, {
+        return_timestamps: true,
+        chunk_length_s: 30,
+        stride_length_s: 5,
+        language: selectedCountry === "auto" ? undefined : selectedCountry,
+        task: "transcribe",
       });
 
-      if (!transcriptionResponse.ok) {
-        const error = await transcriptionResponse.json();
-        throw new Error(error.message || "Transcription failed");
-      }
-
-      const { text, segments } = await transcriptionResponse.json();
-
-      console.log("Transcription completed:", { text, segments });
+      console.log("Transcription completed:", result);
 
       const shortCaptions: Array<{
         text: string;
@@ -116,65 +110,84 @@ export function Captions() {
         duration: number;
       }> = [];
 
-      let globalEndTime = 0; // Track the end time of the last caption globally
+      let globalEndTime = 0;
 
-      segments.forEach((segment: any) => {
-        const words = segment.text.trim().split(/\s+/);
-        const segmentDuration = segment.end - segment.start;
-        const wordsPerSecond = words.length / segmentDuration;
+      // Handle chunks with timestamps from transformers.js
+      if (result.chunks && Array.isArray(result.chunks)) {
+        for (const chunk of result.chunks) {
+          const text = chunk.text?.trim();
+          if (!text) continue;
 
-        // Split into chunks of 2-4 words
-        const chunks: string[] = [];
-        for (let i = 0; i < words.length; i += 3) {
-          chunks.push(words.slice(i, i + 3).join(" "));
-        }
+          const startTime = chunk.timestamp?.[0] ?? globalEndTime;
+          const endTime = chunk.timestamp?.[1] ?? startTime + 2;
+          const duration = Math.max(0.8, endTime - startTime);
 
-        // Calculate timing for each chunk to place them sequentially
-        let chunkStartTime = segment.start;
-        chunks.forEach((chunk) => {
-          const chunkWords = chunk.split(/\s+/).length;
-          const chunkDuration = Math.max(0.8, chunkWords / wordsPerSecond); // Minimum 0.8s per chunk
-
-          let adjustedStartTime = chunkStartTime;
-
-          // Prevent overlapping: if this caption would start before the last one ends,
-          // start it right after the last one ends
-          if (adjustedStartTime < globalEndTime) {
-            adjustedStartTime = globalEndTime;
+          // Split long chunks into smaller pieces (2-4 words)
+          const words = text.split(/\s+/);
+          const chunks: string[] = [];
+          for (let i = 0; i < words.length; i += 3) {
+            chunks.push(words.slice(i, i + 3).join(" "));
           }
 
+          const chunkDuration = duration / chunks.length;
+          let chunkStartTime = startTime;
+
+          for (const chunkText of chunks) {
+            let adjustedStartTime = chunkStartTime;
+            if (adjustedStartTime < globalEndTime) {
+              adjustedStartTime = globalEndTime;
+            }
+
+            shortCaptions.push({
+              text: chunkText,
+              startTime: adjustedStartTime,
+              duration: Math.max(0.8, chunkDuration),
+            });
+
+            globalEndTime = adjustedStartTime + Math.max(0.8, chunkDuration);
+            chunkStartTime += chunkDuration;
+          }
+        }
+      } else if (result.text) {
+        // Fallback for simple text output without timestamps
+        const words = result.text.trim().split(/\s+/);
+        const wordsPerChunk = 3;
+        const defaultDuration = 2;
+
+        for (let i = 0; i < words.length; i += wordsPerChunk) {
+          const chunkText = words.slice(i, i + wordsPerChunk).join(" ");
           shortCaptions.push({
-            text: chunk,
-            startTime: adjustedStartTime,
-            duration: chunkDuration,
+            text: chunkText,
+            startTime: globalEndTime,
+            duration: defaultDuration,
           });
+          globalEndTime += defaultDuration;
+        }
+      }
 
-          // Update global end time
-          globalEndTime = adjustedStartTime + chunkDuration;
-
-          // Next chunk starts when this one ends (for within-segment timing)
-          chunkStartTime += chunkDuration;
-        });
-      });
+      if (shortCaptions.length === 0) {
+        throw new Error("No speech detected in the audio");
+      }
 
       // Create a single track for all captions
       const captionTrackId = insertTrackAt("text", 0);
 
       // Add all caption elements to the same track
-      shortCaptions.forEach((caption, index) => {
+      for (let index = 0; index < shortCaptions.length; index++) {
+        const caption = shortCaptions[index];
         addElementToTrack(captionTrackId, {
           ...DEFAULT_TEXT_ELEMENT,
           name: `Caption ${index + 1}`,
           content: caption.text,
           duration: caption.duration,
           startTime: caption.startTime,
-          fontSize: 65, // Larger for captions
-          fontWeight: "bold", // Bold for captions
+          fontSize: 65,
+          fontWeight: "bold",
         } as TextElement);
-      });
+      }
 
       console.log(
-        `✅ ${shortCaptions.length} short-form caption chunks added to timeline!`
+        `${shortCaptions.length} caption chunks added to timeline!`
       );
     } catch (error) {
       console.error("Transcription failed:", error);
@@ -189,14 +202,26 @@ export function Captions() {
 
   return (
     <BaseView ref={containerRef} className="flex flex-col justify-between h-full">
-      <PropertyGroup title="Language">
-        <LanguageSelect
-          selectedCountry={selectedCountry}
-          onSelect={setSelectedCountry}
-          containerRef={containerRef}
-          languages={languages}
-        />
-      </PropertyGroup>
+      <div className="space-y-4">
+        <PropertyGroup title="Language">
+          <LanguageSelect
+            selectedCountry={selectedCountry}
+            onSelect={setSelectedCountry}
+            containerRef={containerRef}
+            languages={languages}
+          />
+        </PropertyGroup>
+
+        <div className="p-3 bg-muted/50 rounded-md space-y-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Cpu className="h-4 w-4" />
+            <span>Runs locally in your browser</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            First use downloads ~200MB AI model. Your audio never leaves your device.
+          </p>
+        </div>
+      </div>
 
       <div className="flex flex-col gap-4">
         {error && (
@@ -205,98 +230,24 @@ export function Captions() {
           </div>
         )}
 
+        {isLoadingModel && modelProgress > 0 && modelProgress < 100 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Download className="h-4 w-4" />
+              <span>Downloading AI model... {modelProgress}%</span>
+            </div>
+            <Progress value={modelProgress} className="h-2" />
+          </div>
+        )}
+
         <Button
           className="w-full"
-          onClick={() => {
-            if (hasAcceptedPrivacy) {
-              handleGenerateTranscript();
-            } else {
-              setShowPrivacyDialog(true);
-            }
-          }}
+          onClick={handleGenerateTranscript}
           disabled={isProcessing}
         >
           {isProcessing && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
           {isProcessing ? processingStep : "Generate transcript"}
         </Button>
-
-        <Dialog open={showPrivacyDialog} onOpenChange={setShowPrivacyDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Audio Processing Notice
-              </DialogTitle>
-              <DialogDescription className="space-y-3">
-                <p>
-                  To generate captions, we need to process your timeline audio
-                  using speech-to-text technology.
-                </p>
-
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-start gap-2">
-                    <Shield className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">
-                      Zero-knowledge encryption - we cannot decrypt your files
-                      even if we wanted to
-                    </span>
-                  </div>
-
-                  <div className="flex items-start gap-2">
-                    <Shield className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">
-                      Encryption keys generated randomly in your browser, never
-                      stored anywhere
-                    </span>
-                  </div>
-
-                  <div className="flex items-start gap-2">
-                    <Upload className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">
-                      Audio encrypted before upload - raw audio never leaves
-                      your device
-                    </span>
-                  </div>
-
-                  <div className="flex items-start gap-2">
-                    <Trash2 className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">
-                      Everything permanently deleted within seconds after
-                      transcription
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  <strong>True zero-knowledge privacy:</strong> Encryption keys
-                  are generated randomly in your browser and never stored
-                  anywhere. It's cryptographically impossible for us, our cloud
-                  providers, or anyone else to decrypt your audio files.
-                </p>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowPrivacyDialog(false)}
-                disabled={isProcessing}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  localStorage.setItem(PRIVACY_DIALOG_KEY, "true");
-                  setHasAcceptedPrivacy(true);
-                  setShowPrivacyDialog(false);
-                  handleGenerateTranscript();
-                }}
-                disabled={isProcessing}
-              >
-                Continue & Generate Captions
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </BaseView>
   );

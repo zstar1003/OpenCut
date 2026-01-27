@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { ArrowRightIcon } from "lucide-react";
 import { useState, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
 
 export function Onboarding() {
   const [step, setStep] = useState(0);
@@ -29,13 +28,11 @@ export function Onboarding() {
   const getStepTitle = () => {
     switch (step) {
       case 0:
-        return "Welcome to OpenCut Beta! 🎉";
+        return "Welcome to OpenCut!";
       case 1:
-        return "⚠️ This is a super early beta!";
-      case 2:
-        return "🦋 Have fun testing!";
+        return "Getting Started";
       default:
-        return "OpenCut Onboarding";
+        return "OpenCut";
     }
   };
 
@@ -45,8 +42,10 @@ export function Onboarding() {
         return (
           <div className="space-y-5">
             <div className="space-y-3">
-              <Title title="Welcome to OpenCut Beta! 🎉" />
-              <Description description="You're among the first to try OpenCut - the fully open source CapCut alternative." />
+              <Title title="Welcome to OpenCut!" />
+              <Description>
+                A free, open source video editor that runs entirely in your browser. No server processing needed.
+              </Description>
             </div>
             <NextButton onClick={handleNext}>Next</NextButton>
           </div>
@@ -56,21 +55,23 @@ export function Onboarding() {
           <div className="space-y-5">
             <div className="space-y-3">
               <Title title={getStepTitle()} />
-              <Description description="OpenCut started just one month ago. There's still a ton of things to do to make this editor amazing." />
-              <Description description="A lot of features are still missing, like the export functionality. We're working hard to build them out!" />
-              <Description description="If you're curious, check out our roadmap [here](https://opencut.app/roadmap)" />
+              <Description>
+                Import media files, edit your timeline, and use AI-powered captions - all processed locally on your device.
+              </Description>
+              <Description>
+                Join our{" "}
+                <a
+                  href="https://discord.gg/zmR9N35cjK"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground hover:text-foreground/80 underline"
+                >
+                  Discord
+                </a>{" "}
+                to share feedback.
+              </Description>
             </div>
-            <NextButton onClick={handleNext}>Next</NextButton>
-          </div>
-        );
-      case 2:
-        return (
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <Title title={getStepTitle()} />
-              <Description description="Join our [Discord](https://discord.gg/zmR9N35cjK), chat with cool people and share feedback to help make OpenCut the best editor ever." />
-            </div>
-            <NextButton onClick={handleClose}>Finish</NextButton>
+            <NextButton onClick={handleClose}>Get Started</NextButton>
           </div>
         );
       default:
@@ -94,31 +95,9 @@ function Title({ title }: { title: string }) {
   return <h2 className="text-lg md:text-xl font-bold">{title}</h2>;
 }
 
-function Subtitle({ subtitle }: { subtitle: string }) {
-  return <h3 className="text-lg font-medium">{subtitle}</h3>;
-}
-
-function Description({ description }: { description: string }) {
+function Description({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-muted-foreground">
-      <ReactMarkdown
-        components={{
-          p: ({ children }) => <p className="mb-0">{children}</p>,
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-foreground hover:text-foreground/80 underline"
-            >
-              {children}
-            </a>
-          ),
-        }}
-      >
-        {description}
-      </ReactMarkdown>
-    </div>
+    <p className="text-muted-foreground">{children}</p>
   );
 }
 

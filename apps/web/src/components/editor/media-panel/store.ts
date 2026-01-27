@@ -3,7 +3,6 @@ import {
   ArrowLeftRightIcon,
   SparklesIcon,
   StickerIcon,
-  MusicIcon,
   VideoIcon,
   BlendIcon,
   SlidersHorizontalIcon,
@@ -15,7 +14,6 @@ import { create } from "zustand";
 
 export type Tab =
   | "media"
-  | "sounds"
   | "text"
   | "stickers"
   | "effects"
@@ -29,10 +27,6 @@ export const tabs: { [key in Tab]: { icon: LucideIcon; label: string } } = {
   media: {
     icon: VideoIcon,
     label: "Media",
-  },
-  sounds: {
-    icon: MusicIcon,
-    label: "Sounds",
   },
   text: {
     icon: TypeIcon,
