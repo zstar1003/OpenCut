@@ -133,7 +133,7 @@ export const extractTimelineAudio = async (
     await ffmpeg.load();
   } catch (error) {
     console.error("Failed to load fresh FFmpeg instance:", error);
-    throw new Error("Unable to initialize audio processing. Please try again.");
+    throw new Error("无法初始化音频处理，请重试。");
   }
 
   const timeline = useTimelineStore.getState();
@@ -143,8 +143,7 @@ export const extractTimelineAudio = async (
   const totalDuration = timeline.getTotalDuration();
 
   if (totalDuration === 0) {
-    const emptyAudioData = new ArrayBuffer(44);
-    return new Blob([emptyAudioData], { type: "audio/wav" });
+    throw new Error("时间轴为空，没有可提取的音频。");
   }
 
   if (onProgress) {
@@ -187,133 +186,123 @@ export const extractTimelineAudio = async (
   }
 
   if (audioElements.length === 0) {
-    // Return silent audio if no audio elements
-    const silentDuration = Math.max(1, totalDuration); // At least 1 second
-    try {
-      const silentAudio = await generateSilentAudio(silentDuration);
-      return silentAudio;
-    } catch (error) {
-      console.error("Failed to generate silent audio:", error);
-      throw new Error("Unable to generate audio for empty timeline.");
-    }
+    throw new Error("时间轴中没有包含音频的媒体文件。");
   }
 
-  // Create a complex filter to mix all audio sources
+  console.log(`Extracting audio from ${audioElements.length} element(s)`);
+
   const inputFiles: string[] = [];
-  const filterInputs: string[] = [];
-  let validAudioCount = 0;
 
   try {
+    // Write all input files
     for (let i = 0; i < audioElements.length; i++) {
       const element = audioElements[i];
-      const inputName = `input_${i}.${element.file.name.split(".").pop()}`;
+      const ext = element.file.name.split(".").pop() || "mp4";
+      const inputName = `input_${i}.${ext}`;
       inputFiles.push(inputName);
 
+      console.log(`Writing file: ${inputName} (${element.file.size} bytes)`);
+
+      const arrayBuffer = await element.file.arrayBuffer();
+      await ffmpeg.writeFile(inputName, new Uint8Array(arrayBuffer));
+    }
+
+    const outputName = "timeline_audio.wav";
+
+    // For a single element, use simpler extraction
+    if (audioElements.length === 1) {
+      const element = audioElements[0];
+      const actualStart = element.trimStart;
+      const actualDuration = element.duration - element.trimStart - element.trimEnd;
+
+      // Use 16kHz sample rate for Whisper compatibility
+      const ffmpegArgs = [
+        "-i", inputFiles[0],
+        "-vn", // Ignore video
+        "-ss", actualStart.toString(),
+        "-t", actualDuration.toString(),
+        "-acodec", "pcm_s16le",
+        "-ar", "16000", // 16kHz for Whisper
+        "-ac", "1", // Mono for Whisper
+        outputName,
+      ];
+
+      console.log("FFmpeg args (single):", ffmpegArgs.join(" "));
+
       try {
-        await ffmpeg.writeFile(
-          inputName,
-          new Uint8Array(await element.file.arrayBuffer())
-        );
+        await ffmpeg.exec(ffmpegArgs);
       } catch (error) {
-        console.error(`Failed to write file ${element.file.name}:`, error);
-        throw new Error(
-          `Unable to process file: ${element.file.name}. The file may be corrupted or in an unsupported format.`
+        console.error("FFmpeg execution failed:", error);
+        throw new Error("音频提取失败。视频文件可能没有音轨或格式不支持。");
+      }
+    } else {
+      // For multiple elements, use filter_complex
+      const filterInputs: string[] = [];
+
+      for (let i = 0; i < audioElements.length; i++) {
+        const element = audioElements[i];
+        const actualStart = element.trimStart;
+        const actualDuration = element.duration - element.trimStart - element.trimEnd;
+        const delayMs = Math.round(element.startTime * 1000);
+
+        filterInputs.push(
+          `[${i}:a]atrim=start=${actualStart}:duration=${actualDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs}[a${i}]`
         );
       }
 
-      const actualStart = element.trimStart;
-      const actualDuration =
-        element.duration - element.trimStart - element.trimEnd;
+      const mixInputs = audioElements.map((_, i) => `[a${i}]`).join("");
+      // Use 16kHz mono for Whisper compatibility
+      const mixFilter = `${mixInputs}amix=inputs=${audioElements.length}:duration=longest:dropout_transition=2,aresample=16000,aformat=sample_fmts=s16:channel_layouts=mono[out]`;
 
-      const filterName = `audio_${validAudioCount}`;
-      // Use 0:a? syntax to handle files without audio gracefully,
-      // but filter_complex doesn't support ? - we'll handle errors instead
-      filterInputs.push(
-        `[${i}:a]atrim=start=${actualStart}:duration=${actualDuration},asetpts=PTS-STARTPTS,adelay=${element.startTime * 1000}|${element.startTime * 1000}[${filterName}]`
-      );
-      validAudioCount++;
+      const complexFilter = [...filterInputs, mixFilter].join(";");
+
+      const ffmpegArgs = [
+        ...inputFiles.flatMap((name) => ["-i", name]),
+        "-filter_complex", complexFilter,
+        "-map", "[out]",
+        "-t", totalDuration.toString(),
+        "-c:a", "pcm_s16le",
+        "-ar", "16000", // 16kHz for Whisper
+        outputName,
+      ];
+
+      console.log("FFmpeg args (multi):", ffmpegArgs.join(" "));
+
+      try {
+        await ffmpeg.exec(ffmpegArgs);
+      } catch (error) {
+        console.error("FFmpeg execution failed:", error);
+        throw new Error("音频混合失败。某些文件可能没有音轨或格式不支持。");
+      }
     }
 
-    if (validAudioCount === 0) {
-      // No valid audio elements, return silent audio
-      const silentDuration = Math.max(1, totalDuration);
-      return generateSilentAudio(silentDuration);
-    }
-
-    const mixFilter =
-      validAudioCount === 1
-        ? `[audio_0]aresample=44100,aformat=sample_fmts=s16:channel_layouts=stereo[out]`
-        : `${Array.from({ length: validAudioCount }, (_, i) => `[audio_${i}]`).join("")}amix=inputs=${validAudioCount}:duration=longest:dropout_transition=2,aresample=44100,aformat=sample_fmts=s16:channel_layouts=stereo[out]`;
-
-    const complexFilter = [...filterInputs, mixFilter].join(";");
-    const outputName = "timeline_audio.wav";
-
-    const ffmpegArgs = [
-      ...inputFiles.flatMap((name) => ["-i", name]),
-      "-filter_complex",
-      complexFilter,
-      "-map",
-      "[out]",
-      "-t",
-      totalDuration.toString(),
-      "-c:a",
-      "pcm_s16le",
-      "-ar",
-      "44100",
-      outputName,
-    ];
-
-    try {
-      await ffmpeg.exec(ffmpegArgs);
-    } catch (error) {
-      console.error("FFmpeg execution failed:", error);
-      console.error("FFmpeg args:", ffmpegArgs.join(" "));
-      // If FFmpeg fails (e.g., video has no audio track), return silent audio
-      console.warn("Falling back to silent audio due to FFmpeg error");
-      const silentDuration = Math.max(1, totalDuration);
-      return generateSilentAudio(silentDuration);
-    }
-
+    // Read the output file
     let data: Uint8Array;
     try {
       data = await ffmpeg.readFile(outputName) as Uint8Array;
+      console.log(`Audio extracted successfully: ${data.length} bytes`);
     } catch (readError) {
       console.error("Failed to read FFmpeg output:", readError);
-      const silentDuration = Math.max(1, totalDuration);
-      return generateSilentAudio(silentDuration);
+      throw new Error("无法读取提取的音频文件。");
+    }
+
+    if (data.length < 100) {
+      throw new Error("提取的音频文件太小，可能提取失败。");
     }
 
     const blob = new Blob([new Uint8Array(data)], { type: "audio/wav" });
-
     return blob;
-  } catch (error) {
-    console.error("Audio extraction error:", error);
-    for (const inputFile of inputFiles) {
-      try {
-        await ffmpeg.deleteFile(inputFile);
-      } catch (cleanupError) {
-        console.warn(`Failed to cleanup file ${inputFile}:`, cleanupError);
-      }
-    }
-    try {
-      await ffmpeg.deleteFile("timeline_audio.wav");
-    } catch (cleanupError) {
-      console.warn("Failed to cleanup output file:", cleanupError);
-    }
 
-    // Fall back to silent audio instead of throwing
-    console.warn("Falling back to silent audio due to extraction error");
-    const silentDuration = Math.max(1, totalDuration);
-    return generateSilentAudio(silentDuration);
   } finally {
+    // Cleanup
     for (const inputFile of inputFiles) {
       try {
         await ffmpeg.deleteFile(inputFile);
-      } catch (cleanupError) {}
+      } catch {}
     }
     try {
       await ffmpeg.deleteFile("timeline_audio.wav");
-    } catch (cleanupError) {}
+    } catch {}
   }
 };
 

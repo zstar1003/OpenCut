@@ -11,24 +11,27 @@ import { Progress } from "@/components/ui/progress";
 import { TextElement } from "@/types/timeline";
 
 export const languages: Language[] = [
-  { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "it", name: "Italian" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-  { code: "pt", name: "Portuguese" },
-  { code: "ru", name: "Russian" },
-  { code: "ja", name: "Japanese" },
-  { code: "zh", name: "Chinese" },
+  { code: "chinese", name: "中文", flag: "CN" },
+  { code: "english", name: "English", flag: "US" },
+  { code: "japanese", name: "日本語", flag: "JP" },
+  { code: "korean", name: "한국어", flag: "KR" },
+  { code: "spanish", name: "Español", flag: "ES" },
+  { code: "french", name: "Français", flag: "FR" },
+  { code: "german", name: "Deutsch", flag: "DE" },
+  { code: "russian", name: "Русский", flag: "RU" },
+  { code: "portuguese", name: "Português", flag: "PT" },
+  { code: "italian", name: "Italiano", flag: "IT" },
 ];
 
 // Singleton for transcriber to avoid reloading
 let transcriberInstance: any = null;
 let transcriberLoading = false;
 let transcriberLoadPromise: Promise<any> | null = null;
+let currentModelId: string | null = null;
 
 export function Captions() {
-  const [selectedCountry, setSelectedCountry] = useState("auto");
+  // Default to Chinese
+  const [selectedCountry, setSelectedCountry] = useState("chinese");
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +40,17 @@ export function Captions() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { insertTrackAt, addElementToTrack } = useTimelineStore();
 
+  // Use whisper-small - medium is too large for browser memory
+  const modelId = "Xenova/whisper-small";
+
   const loadTranscriber = useCallback(async () => {
+    // If model changed, reset the instance
+    if (currentModelId !== modelId) {
+      transcriberInstance = null;
+      transcriberLoadPromise = null;
+      currentModelId = modelId;
+    }
+
     if (transcriberInstance) {
       return transcriberInstance;
     }
@@ -63,9 +76,11 @@ export function Captions() {
           env.useBrowserCache = true;
         }
 
+        console.log("Loading Whisper model:", modelId);
+
         const transcriber = await pipeline(
           "automatic-speech-recognition",
-          "Xenova/whisper-base",
+          modelId,
           {
             progress_callback: (progress: any) => {
               if (progress.status === "downloading" || progress.status === "progress") {
@@ -91,7 +106,7 @@ export function Captions() {
     })();
 
     return transcriberLoadPromise;
-  }, []);
+  }, [modelId]);
 
   const handleGenerateTranscript = async () => {
     try {
@@ -104,17 +119,28 @@ export function Captions() {
 
       setProcessingStep("正在提取音频...");
       const audioBlob = await extractTimelineAudio();
-      const audioBuffer = await audioBlob.arrayBuffer();
+      console.log("Audio blob size:", audioBlob.size, "bytes");
+
+      // Create a blob URL for the audio
+      const audioUrl = URL.createObjectURL(audioBlob);
+      console.log("Audio URL created:", audioUrl);
 
       setProcessingStep("正在转录...");
 
-      const result = await transcriber(audioBuffer, {
+      // Always pass the selected language explicitly for better accuracy
+      console.log("Transcription language:", selectedCountry);
+
+      // Pass the blob URL directly - let transformers.js handle the decoding
+      const result = await transcriber(audioUrl, {
         return_timestamps: true,
         chunk_length_s: 30,
         stride_length_s: 5,
-        language: selectedCountry === "auto" ? undefined : selectedCountry,
+        language: selectedCountry, // Always specify language
         task: "transcribe",
       });
+
+      // Revoke the blob URL
+      URL.revokeObjectURL(audioUrl);
 
       console.log("Transcription completed:", result);
 
@@ -232,7 +258,7 @@ export function Captions() {
             <span>在浏览器本地运行</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            首次使用需下载约 200MB 的 AI 模型。您的音频不会离开您的设备。
+            首次使用需下载约 500MB 的 AI 模型。模型会缓存在浏览器中，您的音频不会离开您的设备。
           </p>
         </div>
       </div>

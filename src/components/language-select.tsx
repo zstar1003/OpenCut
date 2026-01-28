@@ -15,6 +15,7 @@ interface LanguageSelectProps {
   onSelect: (country: string) => void;
   containerRef: React.RefObject<HTMLDivElement>;
   languages: Language[];
+  showAutoDetect?: boolean;
 }
 
 function FlagPreloader({ languages }: { languages: Language[] }) {
@@ -23,7 +24,7 @@ function FlagPreloader({ languages }: { languages: Language[] }) {
       {languages.map((language) => (
         <ReactCountryFlag
           key={language.code}
-          countryCode={language.code}
+          countryCode={language.flag || language.code}
           svg
           style={{ width: "1.05rem", height: "1.05rem" }}
         />
@@ -37,6 +38,7 @@ export function LanguageSelect({
   onSelect,
   containerRef,
   languages,
+  showAutoDetect = false,
 }: LanguageSelectProps) {
   const [expanded, setExpanded] = useState(false);
   const [isTapping, setIsTapping] = useState(false);
@@ -76,6 +78,8 @@ export function LanguageSelect({
   const selectedLanguage = languages.find(
     (lang) => lang.code === selectedCountry
   );
+
+  const selectedFlag = selectedLanguage?.flag || selectedCountry;
 
   const handleSelect = ({
     code,
@@ -135,7 +139,7 @@ export function LanguageSelect({
                 <Globe className="!size-[1.05rem]" />
               ) : (
                 <ReactCountryFlag
-                  countryCode={selectedCountry}
+                  countryCode={selectedFlag}
                   svg
                   style={{ width: "1.05rem", height: "1.05rem" }}
                 />
@@ -147,11 +151,13 @@ export function LanguageSelect({
           </div>
         ) : (
           <div className="flex flex-col gap-2 my-2.5 w-full overflow-y-auto scrollbar-hidden">
-            <LanguageButton
-              language={{ code: "auto", name: "自动检测" }}
-              onSelect={handleSelect}
-              selectedCountry={selectedCountry}
-            />
+            {showAutoDetect && (
+              <LanguageButton
+                language={{ code: "auto", name: "自动检测" }}
+                onSelect={handleSelect}
+                selectedCountry={selectedCountry}
+              />
+            )}
             {languages.map((language) => (
               <LanguageButton
                 key={language.code}
@@ -201,7 +207,7 @@ function LanguageButton({
         <Globe className="!size-[1.0rem]" />
       ) : (
         <ReactCountryFlag
-          countryCode={language.code}
+          countryCode={language.flag || language.code}
           svg
           style={{ width: "1.05rem", height: "1.05rem" }}
         />
