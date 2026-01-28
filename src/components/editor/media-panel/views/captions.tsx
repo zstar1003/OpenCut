@@ -51,17 +51,27 @@ export function Captions() {
 
     transcriberLoadPromise = (async () => {
       try {
-        const { pipeline } = await import("@xenova/transformers");
+        // 动态导入 transformers 库
+        const transformersModule = await import("@xenova/transformers");
+        const { pipeline, env } = transformersModule;
+
+        // 配置 transformers.js 环境
+        if (env) {
+          // 禁用本地模型缓存检查，直接从 CDN 加载
+          env.allowLocalModels = false;
+          // 使用默认的 Hugging Face CDN
+          env.useBrowserCache = true;
+        }
 
         const transcriber = await pipeline(
           "automatic-speech-recognition",
           "Xenova/whisper-base",
           {
             progress_callback: (progress: any) => {
-              if (progress.status === "downloading") {
+              if (progress.status === "downloading" || progress.status === "progress") {
                 const percent = progress.progress || 0;
                 setModelProgress(Math.round(percent));
-              } else if (progress.status === "ready") {
+              } else if (progress.status === "ready" || progress.status === "done") {
                 setModelProgress(100);
               }
             },
@@ -70,6 +80,10 @@ export function Captions() {
 
         transcriberInstance = transcriber;
         return transcriber;
+      } catch (err) {
+        transcriberLoading = false;
+        transcriberLoadPromise = null;
+        throw err;
       } finally {
         transcriberLoading = false;
         setIsLoadingModel(false);
@@ -85,14 +99,14 @@ export function Captions() {
       setError(null);
       setModelProgress(0);
 
-      setProcessingStep("Loading AI model...");
+      setProcessingStep("正在加载 AI 模型...");
       const transcriber = await loadTranscriber();
 
-      setProcessingStep("Extracting audio...");
+      setProcessingStep("正在提取音频...");
       const audioBlob = await extractTimelineAudio();
       const audioBuffer = await audioBlob.arrayBuffer();
 
-      setProcessingStep("Transcribing...");
+      setProcessingStep("正在转录...");
 
       const result = await transcriber(audioBuffer, {
         return_timestamps: true,
@@ -166,7 +180,7 @@ export function Captions() {
       }
 
       if (shortCaptions.length === 0) {
-        throw new Error("No speech detected in the audio");
+        throw new Error("未检测到音频中的语音");
       }
 
       // Create a single track for all captions
@@ -177,7 +191,7 @@ export function Captions() {
         const caption = shortCaptions[index];
         addElementToTrack(captionTrackId, {
           ...DEFAULT_TEXT_ELEMENT,
-          name: `Caption ${index + 1}`,
+          name: `字幕 ${index + 1}`,
           content: caption.text,
           duration: caption.duration,
           startTime: caption.startTime,
@@ -192,7 +206,7 @@ export function Captions() {
     } catch (error) {
       console.error("Transcription failed:", error);
       setError(
-        error instanceof Error ? error.message : "An unexpected error occurred"
+        error instanceof Error ? error.message : "发生了意外错误"
       );
     } finally {
       setIsProcessing(false);
@@ -203,7 +217,7 @@ export function Captions() {
   return (
     <BaseView ref={containerRef} className="flex flex-col justify-between h-full">
       <div className="space-y-4">
-        <PropertyGroup title="Language">
+        <PropertyGroup title="语言">
           <LanguageSelect
             selectedCountry={selectedCountry}
             onSelect={setSelectedCountry}
@@ -215,10 +229,10 @@ export function Captions() {
         <div className="p-3 bg-muted/50 rounded-md space-y-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Cpu className="h-4 w-4" />
-            <span>Runs locally in your browser</span>
+            <span>在浏览器本地运行</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            First use downloads ~200MB AI model. Your audio never leaves your device.
+            首次使用需下载约 200MB 的 AI 模型。您的音频不会离开您的设备。
           </p>
         </div>
       </div>
@@ -234,7 +248,7 @@ export function Captions() {
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Download className="h-4 w-4" />
-              <span>Downloading AI model... {modelProgress}%</span>
+              <span>正在下载 AI 模型... {modelProgress}%</span>
             </div>
             <Progress value={modelProgress} className="h-2" />
           </div>
@@ -246,7 +260,7 @@ export function Captions() {
           disabled={isProcessing}
         >
           {isProcessing && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-          {isProcessing ? processingStep : "Generate transcript"}
+          {isProcessing ? processingStep : "生成字幕"}
         </Button>
       </div>
     </BaseView>

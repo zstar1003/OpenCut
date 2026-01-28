@@ -304,16 +304,16 @@ export function TimelineElement({
           <ContextMenuItem onClick={handleElementSplitContext}>
             <Scissors className="h-4 w-4 mr-2" />
             {isMultipleSelected && isCurrentElementSelected
-              ? `Split ${selectedElements.length} elements at playhead`
-              : "Split at playhead"}
+              ? `在播放头位置分割 ${selectedElements.length} 个元素`
+              : "在播放头位置分割"}
           </ContextMenuItem>
         )}
 
         <ContextMenuItem onClick={handleElementCopyContext}>
           <Copy className="h-4 w-4 mr-2" />
           {isMultipleSelected && isCurrentElementSelected
-            ? `Copy ${selectedElements.length} elements`
-            : "Copy element"}
+            ? `复制 ${selectedElements.length} 个元素`
+            : "复制元素"}
         </ContextMenuItem>
 
         <ContextMenuItem onClick={handleToggleElementContext}>
@@ -337,23 +337,23 @@ export function TimelineElement({
           <span>
             {isMultipleSelected && isCurrentElementSelected
               ? hasAudioElements
-                ? `Toggle mute ${selectedElements.length} elements`
-                : `Toggle visibility ${selectedElements.length} elements`
+                ? `切换 ${selectedElements.length} 个元素的静音状态`
+                : `切换 ${selectedElements.length} 个元素的可见性`
               : hasAudio
                 ? isMuted
-                  ? "Unmute"
-                  : "Mute"
+                  ? "取消静音"
+                  : "静音"
                 : element.hidden
-                  ? "Show"
-                  : "Hide"}{" "}
-            {!isMultipleSelected && (element.type === "text" ? "text" : "clip")}
+                  ? "显示"
+                  : "隐藏"}{" "}
+            {!isMultipleSelected && (element.type === "text" ? "文字" : "片段")}
           </span>
         </ContextMenuItem>
 
         {!isMultipleSelected && (
           <ContextMenuItem onClick={handleElementDuplicateContext}>
             <Copy className="h-4 w-4 mr-2" />
-            Duplicate {element.type === "text" ? "text" : "clip"}
+            复制{element.type === "text" ? "文字" : "片段"}
           </ContextMenuItem>
         )}
 
@@ -361,11 +361,11 @@ export function TimelineElement({
           <>
             <ContextMenuItem onClick={handleRevealInMedia}>
               <Search className="h-4 w-4 mr-2" />
-              Reveal in media
+              在媒体库中显示
             </ContextMenuItem>
             <ContextMenuItem onClick={handleReplaceClip}>
               <RefreshCw className="h-4 w-4 mr-2" />
-              Replace clip
+              替换片段
             </ContextMenuItem>
           </>
         )}
@@ -378,8 +378,8 @@ export function TimelineElement({
         >
           <Trash2 className="h-4 w-4 mr-2" />
           {isMultipleSelected && isCurrentElementSelected
-            ? `Delete ${selectedElements.length} elements`
-            : `Delete ${element.type === "text" ? "text" : "clip"}`}
+            ? `删除 ${selectedElements.length} 个元素`
+            : `删除${element.type === "text" ? "文字" : "片段"}`}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

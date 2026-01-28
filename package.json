@@ -4,7 +4,8 @@
   "private": true,
   "packageManager": "bun@1.2.18",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
+    "dev:turbo": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "biome check src/",

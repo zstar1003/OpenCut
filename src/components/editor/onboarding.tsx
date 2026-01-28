@@ -28,9 +28,9 @@ export function Onboarding() {
   const getStepTitle = () => {
     switch (step) {
       case 0:
-        return "Welcome to OpenCut!";
+        return "欢迎使用 OpenCut！";
       case 1:
-        return "Getting Started";
+        return "开始使用";
       default:
         return "OpenCut";
     }
@@ -42,12 +42,12 @@ export function Onboarding() {
         return (
           <div className="space-y-5">
             <div className="space-y-3">
-              <Title title="Welcome to OpenCut!" />
+              <Title title="欢迎使用 OpenCut！" />
               <Description>
-                A free, open source video editor that runs entirely in your browser. No server processing needed.
+                一款免费的开源视频编辑器，完全在浏览器中运行。无需服务器处理。
               </Description>
             </div>
-            <NextButton onClick={handleNext}>Next</NextButton>
+            <NextButton onClick={handleNext}>下一步</NextButton>
           </div>
         );
       case 1:
@@ -56,10 +56,10 @@ export function Onboarding() {
             <div className="space-y-3">
               <Title title={getStepTitle()} />
               <Description>
-                Import media files, edit your timeline, and use AI-powered captions - all processed locally on your device.
+                导入媒体文件、编辑时间轴、使用 AI 驱动的字幕功能 - 所有处理都在您的设备本地完成。
               </Description>
               <Description>
-                Join our{" "}
+                加入我们的{" "}
                 <a
                   href="https://discord.gg/zmR9N35cjK"
                   target="_blank"
@@ -68,10 +68,10 @@ export function Onboarding() {
                 >
                   Discord
                 </a>{" "}
-                to share feedback.
+                分享反馈。
               </Description>
             </div>
-            <NextButton onClick={handleClose}>Get Started</NextButton>
+            <NextButton onClick={handleClose}>开始使用</NextButton>
           </div>
         );
       default:

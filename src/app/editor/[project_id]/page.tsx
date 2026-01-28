@@ -109,7 +109,7 @@ export default function Editor() {
           markProjectIdAsInvalid(projectId);
 
           try {
-            const newProjectId = await createNewProject("Untitled Project");
+            const newProjectId = await createNewProject("未命名项目");
 
             // Check again if component was unmounted
             if (isCancelled) {

@@ -32,3 +32,9 @@ apps/transcription/__pycache__
 apps/transcription/env
 
 apps/bg-remover/env
+
+# Next.js build output
+.next/
+apps/web/.next/
+out/
+apps/web/out/

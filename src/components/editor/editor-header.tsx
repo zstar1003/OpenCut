@@ -67,7 +67,7 @@ export function EditorHeader() {
             onClick={openRenameDialog}
           >
             <SquarePen className="h-4 w-4" />
-            Rename project
+            重命名项目
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
@@ -87,15 +87,15 @@ export function EditorHeader() {
       <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Project</DialogTitle>
+            <DialogTitle>重命名项目</DialogTitle>
             <DialogDescription>
-              Enter a new name for your project.
+              请输入项目的新名称。
             </DialogDescription>
           </DialogHeader>
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Project name"
+            placeholder="项目名称"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 handleNameSave();
@@ -104,9 +104,9 @@ export function EditorHeader() {
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>
-              Cancel
+              取消
             </Button>
-            <Button onClick={handleNameSave}>Save</Button>
+            <Button onClick={handleNameSave}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

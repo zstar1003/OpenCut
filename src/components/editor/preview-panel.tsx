@@ -810,7 +810,7 @@ function FullscreenToolbar({
           onClick={skipBackward}
           disabled={!hasAnyElements}
           className="h-auto p-0 text-foreground"
-          title="Skip backward 1s"
+          title="后退 1 秒"
         >
           <SkipBack className="h-3 w-3" />
         </Button>
@@ -833,7 +833,7 @@ function FullscreenToolbar({
           onClick={skipForward}
           disabled={!hasAnyElements}
           className="h-auto p-0 text-foreground hover:text-foreground/80"
-          title="Skip forward 1s"
+          title="前进 1 秒"
         >
           <SkipForward className="h-3 w-3" />
         </Button>
@@ -868,7 +868,7 @@ function FullscreenToolbar({
         size="icon"
         className="size-4! text-foreground/80 hover:text-foreground"
         onClick={onToggleExpanded}
-        title="Exit fullscreen (Esc)"
+        title="退出全屏 (Esc)"
       >
         <Expand className="size-4!" />
       </Button>
@@ -920,7 +920,7 @@ function FullscreenPreview({
           {renderBlurBackground()}
           {activeElements.length === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center text-white/60">
-              No elements at current time
+              当前时间没有元素
             </div>
           ) : (
             activeElements.map((elementData, index) =>
@@ -1004,7 +1004,7 @@ function PreviewToolbar({
               variant="text"
               size="icon"
               className="h-auto p-0 mr-1"
-              title="Toggle layout guide"
+              title="切换布局参考线"
             >
               <SocialsIcon className="!size-6" />
             </Button>
@@ -1051,7 +1051,7 @@ function PreviewToolbar({
           size="icon"
           className="size-4!"
           onClick={onToggleExpanded}
-          title="Enter fullscreen"
+          title="进入全屏"
         >
           <Expand className="size-4!" />
         </Button>

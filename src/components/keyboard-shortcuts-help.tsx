@@ -56,7 +56,7 @@ export function KeyboardShortcutsHelp() {
         );
         if (conflict) {
           toast.error(
-            `Key "${keyString}" is already bound to "${conflict.existingAction}"`
+            `按键"${keyString}"已绑定到"${conflict.existingAction}"`
           );
           setRecordingShortcut(null);
           return;
@@ -107,18 +107,18 @@ export function KeyboardShortcutsHelp() {
       <DialogTrigger asChild>
         <Button variant="text" size="sm" className="gap-2">
           <Keyboard className="w-4 h-4" />
-          Shortcuts
+          快捷键
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0">
         <DialogHeader className="flex-shrink-0 p-6 pb-0">
           <DialogTitle className="flex items-center gap-2">
             <Keyboard className="w-5 h-5" />
-            Keyboard Shortcuts
+            键盘快捷键
           </DialogTitle>
           <DialogDescription>
-            Speed up your video editing workflow with these keyboard shortcuts.
-            Click any shortcut key to edit it.
+            使用键盘快捷键加速您的视频编辑工作流程。
+            点击任意快捷键可进行编辑。
           </DialogDescription>
         </DialogHeader>
 
@@ -149,7 +149,7 @@ export function KeyboardShortcutsHelp() {
         </div>
         <DialogFooter className="flex-shrink-0 p-6 pt-4">
           <Button size="sm" variant="destructive" onClick={resetToDefaults}>
-            Reset to Default
+            恢复默认设置
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -203,7 +203,7 @@ function ShortcutItem({
               })}
             </div>
             {index < displayKeys.length - 1 && (
-              <span className="text-xs text-muted-foreground">or</span>
+              <span className="text-xs text-muted-foreground">或</span>
             )}
           </div>
         ))}
@@ -236,7 +236,7 @@ function EditableShortcutKey({
       }`}
       onClick={handleClick}
       title={
-        isRecording ? "Press any key combination..." : "Click to edit shortcut"
+        isRecording ? "请按下任意组合键..." : "点击编辑快捷键"
       }
     >
       {children}

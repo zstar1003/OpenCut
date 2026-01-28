@@ -43,13 +43,13 @@ export function LanguageSelect({
   const [isClosing, setIsClosing] = useState(false);
   const collapsedHeight = "2.5rem";
   const expandHeight = "12rem";
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const containerRef2 = useRef<HTMLDivElement>(null);
 
   const expand = () => {
     setIsTapping(true);
     setTimeout(() => setIsTapping(false), 600);
     setExpanded(true);
-    buttonRef.current?.focus();
+    containerRef2.current?.focus();
   };
 
   useEffect(() => {
@@ -57,13 +57,13 @@ export function LanguageSelect({
 
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node)
+        containerRef2.current &&
+        !containerRef2.current.contains(event.target as Node)
       ) {
         setIsClosing(true);
         setTimeout(() => setIsClosing(false), 600);
         setExpanded(false);
-        buttonRef.current?.blur();
+        containerRef2.current?.blur();
       }
     };
 
@@ -93,8 +93,7 @@ export function LanguageSelect({
   return (
     <div className="relative w-full h-9">
       <FlagPreloader languages={languages} />
-      <motion.button
-        type="button"
+      <motion.div
         className={cn(
           "absolute w-full h-full flex flex-col overflow-hidden items-start justify-between z-10 rounded-lg px-3 cursor-pointer",
           "!bg-foreground/10 backdrop-blur-md text-foreground py-0",
@@ -112,8 +111,17 @@ export function LanguageSelect({
           height: { duration: 0.25, ease: [0.4, 0, 0.2, 1] },
           scale: { duration: 0.6, ease: "easeOut" },
         }}
-        onClick={expand}
-        ref={buttonRef}
+        onClick={!expanded ? expand : undefined}
+        ref={containerRef2}
+        role="listbox"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            if (!expanded) {
+              expand();
+            }
+          }
+        }}
       >
         {!expanded ? (
           <div
@@ -133,14 +141,14 @@ export function LanguageSelect({
                 />
               )}
               <span className="pt-[0.05rem]">
-                {selectedCountry === "auto" ? "Auto" : selectedLanguage?.name}
+                {selectedCountry === "auto" ? "自动检测" : selectedLanguage?.name}
               </span>
             </div>
           </div>
         ) : (
           <div className="flex flex-col gap-2 my-2.5 w-full overflow-y-auto scrollbar-hidden">
             <LanguageButton
-              language={{ code: "auto", name: "Auto" }}
+              language={{ code: "auto", name: "自动检测" }}
               onSelect={handleSelect}
               selectedCountry={selectedCountry}
             />
@@ -154,7 +162,7 @@ export function LanguageSelect({
             ))}
           </div>
         )}
-      </motion.button>
+      </motion.div>
 
       <motion.div
         className="absolute top-1/2 right-3 -translate-y-1/2 pointer-events-none z-20 mt-0.5"
