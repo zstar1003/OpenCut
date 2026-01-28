@@ -21,11 +21,11 @@ export function createMainScene(): Scene {
   };
 }
 
-const createDefaultProject = (name: string): TProject => {
+const createDefaultProject = (name: string, id?: string): TProject => {
   const mainScene = createMainScene();
 
   return {
-    id: generateUUID(),
+    id: id || generateUUID(),
     name,
     thumbnail: "",
     createdAt: new Date(),
@@ -223,33 +223,36 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     sceneStore.clearScenes();
 
     try {
-      const project = await storageService.loadProject({ id });
-      if (project) {
-        set({ activeProject: project });
+      let project = await storageService.loadProject({ id });
 
-        let currentScene = null;
-        if (project.scenes && project.scenes.length > 0) {
-          sceneStore.initializeScenes({
-            scenes: project.scenes,
-            currentSceneId: project.currentSceneId,
-          });
-          // Get current scene directly from project data (don't rely on store state)
-          currentScene =
-            project.scenes.find((s) => s.id === project.currentSceneId) ||
-            project.scenes.find((s) => s.isMain) ||
-            project.scenes[0];
-        }
-
-        await Promise.all([
-          mediaStore.loadProjectMedia(id),
-          timelineStore.loadProjectTimeline({
-            projectId: id,
-            sceneId: currentScene?.id,
-          }),
-        ]);
-      } else {
-        throw new Error(`Project with id ${id} not found`);
+      // If project doesn't exist, create a new one with this ID
+      if (!project) {
+        project = createDefaultProject("Untitled Project", id);
+        await storageService.saveProject({ project });
       }
+
+      set({ activeProject: project });
+
+      let currentScene = null;
+      if (project.scenes && project.scenes.length > 0) {
+        sceneStore.initializeScenes({
+          scenes: project.scenes,
+          currentSceneId: project.currentSceneId,
+        });
+        // Get current scene directly from project data (don't rely on store state)
+        currentScene =
+          project.scenes.find((s) => s.id === project.currentSceneId) ||
+          project.scenes.find((s) => s.isMain) ||
+          project.scenes[0];
+      }
+
+      await Promise.all([
+        mediaStore.loadProjectMedia(id),
+        timelineStore.loadProjectTimeline({
+          projectId: id,
+          sceneId: currentScene?.id,
+        }),
+      ]);
     } catch (error) {
       console.error("Failed to load project:", error);
       throw error; // Re-throw so the editor page can handle it
