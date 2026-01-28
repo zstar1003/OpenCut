@@ -43,6 +43,9 @@ export function Captions() {
   // Use whisper-small - medium is too large for browser memory
   const modelId = "Xenova/whisper-small";
 
+  // Track the highest progress value to prevent progress bar from going backwards
+  const maxProgressRef = useRef(0);
+
   const loadTranscriber = useCallback(async () => {
     // If model changed, reset the instance
     if (currentModelId !== modelId) {
@@ -61,6 +64,7 @@ export function Captions() {
 
     transcriberLoading = true;
     setIsLoadingModel(true);
+    maxProgressRef.current = 0;
 
     transcriberLoadPromise = (async () => {
       try {
@@ -85,8 +89,13 @@ export function Captions() {
             progress_callback: (progress: any) => {
               if (progress.status === "downloading" || progress.status === "progress") {
                 const percent = progress.progress || 0;
-                setModelProgress(Math.round(percent));
+                // Only update if progress increased (prevents jumping backwards)
+                if (percent > maxProgressRef.current) {
+                  maxProgressRef.current = percent;
+                  setModelProgress(Math.round(percent));
+                }
               } else if (progress.status === "ready" || progress.status === "done") {
+                maxProgressRef.current = 100;
                 setModelProgress(100);
               }
             },
