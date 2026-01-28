@@ -26,49 +26,60 @@ export async function generateThumbnail({
     formats: ALL_FORMATS,
   });
 
-  const videoTrack = await input.getPrimaryVideoTrack();
-  if (!videoTrack) {
-    throw new Error("No video track found in the file");
+  try {
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack) {
+      throw new Error("No video track found in the file");
+    }
+
+    // Check if we can decode this video
+    const canDecode = await videoTrack.canDecode();
+    if (!canDecode) {
+      throw new Error("Video codec not supported for decoding");
+    }
+
+    const sink = new VideoSampleSink(videoTrack);
+
+    const frame = await sink.getSample(timeInSeconds);
+
+    if (!frame) {
+      throw new Error("Could not get frame at specified time");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 240;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      frame.close(); // Close frame before throwing
+      throw new Error("Could not get canvas context");
+    }
+
+    try {
+      frame.draw(ctx, 0, 0, 320, 240);
+    } finally {
+      // Always close the frame to release VideoFrame resources
+      frame.close();
+    }
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(URL.createObjectURL(blob));
+          } else {
+            reject(new Error("Failed to create thumbnail blob"));
+          }
+        },
+        "image/jpeg",
+        0.8
+      );
+    });
+  } finally {
+    // Always dispose the input to release internal resources
+    input.dispose();
   }
-
-  // Check if we can decode this video
-  const canDecode = await videoTrack.canDecode();
-  if (!canDecode) {
-    throw new Error("Video codec not supported for decoding");
-  }
-
-  const sink = new VideoSampleSink(videoTrack);
-
-  const frame = await sink.getSample(timeInSeconds);
-
-  if (!frame) {
-    throw new Error("Could not get frame at specified time");
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = 320;
-  canvas.height = 240;
-  const ctx = canvas.getContext("2d");
-
-  if (!ctx) {
-    throw new Error("Could not get canvas context");
-  }
-
-  frame.draw(ctx, 0, 0, 320, 240);
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(URL.createObjectURL(blob));
-        } else {
-          reject(new Error("Failed to create thumbnail blob"));
-        }
-      },
-      "image/jpeg",
-      0.8
-    );
-  });
 }
 
 export async function getVideoInfo({
@@ -86,23 +97,28 @@ export async function getVideoInfo({
     formats: ALL_FORMATS,
   });
 
-  const duration = await input.computeDuration();
-  const videoTrack = await input.getPrimaryVideoTrack();
+  try {
+    const duration = await input.computeDuration();
+    const videoTrack = await input.getPrimaryVideoTrack();
 
-  if (!videoTrack) {
-    throw new Error("No video track found in the file");
+    if (!videoTrack) {
+      throw new Error("No video track found in the file");
+    }
+
+    // Get frame rate from packet statistics
+    const packetStats = await videoTrack.computePacketStats(100);
+    const fps = packetStats.averagePacketRate;
+
+    return {
+      duration,
+      width: videoTrack.displayWidth,
+      height: videoTrack.displayHeight,
+      fps,
+    };
+  } finally {
+    // Always dispose the input to release internal resources
+    input.dispose();
   }
-
-  // Get frame rate from packet statistics
-  const packetStats = await videoTrack.computePacketStats(100);
-  const fps = packetStats.averagePacketRate;
-
-  return {
-    duration,
-    width: videoTrack.displayWidth,
-    height: videoTrack.displayHeight,
-    fps,
-  };
 }
 
 // Audio mixing for timeline - keeping FFmpeg for now due to complexity

@@ -260,6 +260,7 @@ export function useFrameCache(options: FrameCacheOptions = {}) {
   );
 
   // Pre-render frames around current time
+  // 限制并发预渲染数量以避免内存问题
   const preRenderNearbyFrames = useCallback(
     async (
       currentTime: number,
@@ -270,12 +271,14 @@ export function useFrameCache(options: FrameCacheOptions = {}) {
       sceneId?: string,
       range: number = 3 // seconds
     ) => {
+      // 只预渲染当前时间附近的少量帧，避免并发过多
       const framesToPreRender: number[] = [];
 
-      // Calculate frames to pre-render (around current time)
+      // 只预渲染前后各 0.5 秒的帧
+      const actualRange = Math.min(range, 0.5);
       for (
-        let offset = -range;
-        offset <= range;
+        let offset = -actualRange;
+        offset <= actualRange;
         offset += 1 / cacheResolution
       ) {
         const time = currentTime + offset;
@@ -286,50 +289,33 @@ export function useFrameCache(options: FrameCacheOptions = {}) {
         }
       }
 
-      // Expand to full 1-second buckets to avoid fragmented tiny cache regions
-      const secondsToPreRender = new Set<number>();
-      for (const t of framesToPreRender) {
-        secondsToPreRender.add(Math.floor(t));
-      }
+      // 限制最多预渲染 5 帧
+      const CAP = 5;
+      const toSchedule = framesToPreRender.slice(0, CAP);
 
-      const expandedTimes: number[] = [];
-      for (const s of secondsToPreRender) {
-        for (let k = 0; k < cacheResolution; k++) {
-          const t = s + k / cacheResolution;
-          if (t < 0) continue;
-          if (!isFrameCached(t, tracks, mediaFiles, activeProject, sceneId)) {
-            expandedTimes.push(t);
-          }
-        }
-      }
-
-      // Sort forward-first near currentTime to improve perceived responsiveness
-      expandedTimes.sort((a, b) => {
-        const da = a >= currentTime ? a - currentTime : currentTime - a + 1e6;
-        const db = b >= currentTime ? b - currentTime : currentTime - b + 1e6;
-        return da - db;
-      });
-
-      // Cap total scheduled renders to avoid jank (e.g., up to 90 frames)
-      const CAP = Math.max(30, Math.min(90, cacheResolution * 3));
-      const toSchedule = expandedTimes.slice(0, CAP);
-
-      // Pre-render during idle time
+      // 顺序预渲染，不并发，避免内存问题
       for (const time of toSchedule) {
-        requestIdleCallback(async () => {
-          try {
-            const imageData = await renderFunction(time);
-            cacheFrame(
-              time,
-              imageData,
-              tracks,
-              mediaFiles,
-              activeProject,
-              sceneId
-            );
-          } catch (error) {
-            console.warn(`Pre-render failed for time ${time}:`, error);
-          }
+        // 使用 setTimeout 代替 requestIdleCallback 来更好地控制时机
+        await new Promise<void>((resolve) => {
+          setTimeout(async () => {
+            try {
+              // 再次检查是否已缓存，避免重复渲染
+              if (!isFrameCached(time, tracks, mediaFiles, activeProject, sceneId)) {
+                const imageData = await renderFunction(time);
+                cacheFrame(
+                  time,
+                  imageData,
+                  tracks,
+                  mediaFiles,
+                  activeProject,
+                  sceneId
+                );
+              }
+            } catch (error) {
+              // 静默忽略预渲染错误
+            }
+            resolve();
+          }, 0);
         });
       }
     },

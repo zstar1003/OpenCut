@@ -47,7 +47,7 @@ export function PreviewPanel() {
   const { currentScene } = useSceneStore();
   const previewRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { getCachedFrame, cacheFrame, invalidateCache, preRenderNearbyFrames } =
+  const { getCachedFrame, cacheFrame, invalidateCache } =
     useFrameCache();
   const lastFrameTimeRef = useRef(0);
   const renderSeqRef = useRef(0);
@@ -501,80 +501,8 @@ export function PreviewPanel() {
       if (cachedFrame) {
         mainCtx.putImageData(cachedFrame, 0, 0);
 
-        // Pre-render nearby frames in background
-        if (!isPlaying) {
-          // Only during scrubbing to avoid interfering with playback
-          preRenderNearbyFrames(
-            currentTime,
-            tracks,
-            mediaFiles,
-            activeProject,
-            async (time: number) => {
-              const tempCanvas = document.createElement("canvas");
-              tempCanvas.width = displayWidth;
-              tempCanvas.height = displayHeight;
-              const tempCtx = tempCanvas.getContext("2d");
-              if (!tempCtx)
-                throw new Error("Failed to create temp canvas context");
-
-              await renderTimelineFrame({
-                ctx: tempCtx,
-                time,
-                canvasWidth: displayWidth,
-                canvasHeight: displayHeight,
-                tracks,
-                mediaFiles,
-                backgroundType: activeProject?.backgroundType,
-                blurIntensity: activeProject?.blurIntensity,
-                backgroundColor:
-                  activeProject?.backgroundType === "blur"
-                    ? undefined
-                    : activeProject?.backgroundColor || "#000000",
-                projectCanvasSize: canvasSize,
-              });
-
-              return tempCtx.getImageData(0, 0, displayWidth, displayHeight);
-            },
-            currentScene?.id,
-            3
-          );
-        } else {
-          // Small lookahead while playing
-          preRenderNearbyFrames(
-            currentTime,
-            tracks,
-            mediaFiles,
-            activeProject,
-            async (time: number) => {
-              const tempCanvas = document.createElement("canvas");
-              tempCanvas.width = displayWidth;
-              tempCanvas.height = displayHeight;
-              const tempCtx = tempCanvas.getContext("2d");
-              if (!tempCtx)
-                throw new Error("Failed to create temp canvas context");
-
-              await renderTimelineFrame({
-                ctx: tempCtx,
-                time,
-                canvasWidth: displayWidth,
-                canvasHeight: displayHeight,
-                tracks,
-                mediaFiles,
-                backgroundType: activeProject?.backgroundType,
-                blurIntensity: activeProject?.blurIntensity,
-                backgroundColor:
-                  activeProject?.backgroundType === "blur"
-                    ? undefined
-                    : activeProject?.backgroundColor || "#000000",
-                projectCanvasSize: canvasSize,
-              });
-
-              return tempCtx.getImageData(0, 0, displayWidth, displayHeight);
-            },
-            currentScene?.id,
-            1
-          );
-        }
+        // 注意：禁用预渲染以避免内存问题
+        // 如果需要预渲染，可以在这里添加，但要确保不会并发太多请求
         return;
       }
 
@@ -683,7 +611,6 @@ export function PreviewPanel() {
     activeProject?.backgroundColor,
     getCachedFrame,
     cacheFrame,
-    preRenderNearbyFrames,
     isPlaying,
   ]);
 

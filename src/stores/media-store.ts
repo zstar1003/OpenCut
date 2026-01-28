@@ -166,7 +166,8 @@ export const useMediaStore = create<MediaStore>((set, get) => ({
     const state = get();
     const item = state.mediaFiles.find((media) => media.id === id);
 
-    videoCache.clearVideo(id);
+    // Clear video cache asynchronously
+    void videoCache.clearVideo(id);
 
     // Cleanup object URLs to prevent memory leaks
     if (item?.url) {
@@ -251,6 +252,9 @@ export const useMediaStore = create<MediaStore>((set, get) => ({
   clearProjectMedia: async (projectId) => {
     const state = get();
 
+    // Clear video cache for all media files asynchronously
+    void videoCache.clearAll();
+
     // Cleanup all object URLs
     state.mediaFiles.forEach((item) => {
       if (item.url) {
@@ -278,7 +282,8 @@ export const useMediaStore = create<MediaStore>((set, get) => ({
   clearAllMedia: () => {
     const state = get();
 
-    videoCache.clearAll();
+    // Clear video cache asynchronously
+    void videoCache.clearAll();
 
     // Cleanup all object URLs
     state.mediaFiles.forEach((item) => {
