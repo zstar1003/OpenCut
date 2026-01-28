@@ -6,7 +6,7 @@ import { useTimelineStore } from "@/stores/timeline-store";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { PanelBaseView } from "@/components/editor/panel-base-view";
 import {
   TEXT_PROPERTIES_TABS,
@@ -44,6 +44,18 @@ export function TextProperties({
   const [opacityInput, setOpacityInput] = useState(
     Math.round(element.opacity * 100).toString()
   );
+  const [xInput, setXInput] = useState(element.x.toString());
+  const [yInput, setYInput] = useState(element.y.toString());
+  const [rotationInput, setRotationInput] = useState(element.rotation.toString());
+
+  // Sync local state when element changes (e.g., when switching between elements)
+  useEffect(() => {
+    setFontSizeInput(element.fontSize.toString());
+    setOpacityInput(Math.round(element.opacity * 100).toString());
+    setXInput(element.x.toString());
+    setYInput(element.y.toString());
+    setRotationInput(element.rotation.toString());
+  }, [element.id, element.fontSize, element.opacity, element.x, element.y, element.rotation]);
 
   // Track the last selected color for toggling
   const lastSelectedColor = useRef("#000000");
@@ -104,6 +116,48 @@ export function TextProperties({
     updateTextElement(trackId, element.id, { opacity: opacityPercent / 100 });
   };
 
+  const handleXChange = (value: string) => {
+    setXInput(value);
+    if (value.trim() !== "" && value !== "-") {
+      const x = parseAndValidateNumber(value, -1000, 1000, element.x);
+      updateTextElement(trackId, element.id, { x });
+    }
+  };
+
+  const handleXBlur = () => {
+    const x = parseAndValidateNumber(xInput, -1000, 1000, element.x);
+    setXInput(x.toString());
+    updateTextElement(trackId, element.id, { x });
+  };
+
+  const handleYChange = (value: string) => {
+    setYInput(value);
+    if (value.trim() !== "" && value !== "-") {
+      const y = parseAndValidateNumber(value, -1000, 1000, element.y);
+      updateTextElement(trackId, element.id, { y });
+    }
+  };
+
+  const handleYBlur = () => {
+    const y = parseAndValidateNumber(yInput, -1000, 1000, element.y);
+    setYInput(y.toString());
+    updateTextElement(trackId, element.id, { y });
+  };
+
+  const handleRotationChange = (value: string) => {
+    setRotationInput(value);
+    if (value.trim() !== "" && value !== "-") {
+      const rotation = parseAndValidateNumber(value, -360, 360, element.rotation);
+      updateTextElement(trackId, element.id, { rotation });
+    }
+  };
+
+  const handleRotationBlur = () => {
+    const rotation = parseAndValidateNumber(rotationInput, -360, 360, element.rotation);
+    setRotationInput(rotation.toString());
+    updateTextElement(trackId, element.id, { rotation });
+  };
+
   // Update last selected color when a new color is picked
   const handleColorChange = (color: string) => {
     if (color !== "transparent") {
@@ -131,7 +185,98 @@ export function TextProperties({
         label: t.label,
         content:
           t.value === "transform" ? (
-            <div className="space-y-6"></div>
+            <div className="space-y-6">
+              <PropertyItem direction="column">
+                <PropertyItemLabel>位置 X</PropertyItemLabel>
+                <PropertyItemValue>
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      value={[element.x]}
+                      min={-500}
+                      max={500}
+                      step={1}
+                      onValueChange={([value]) => {
+                        updateTextElement(trackId, element.id, { x: value });
+                        setXInput(value.toString());
+                      }}
+                      className="w-full"
+                    />
+                    <Input
+                      type="number"
+                      value={xInput}
+                      min={-1000}
+                      max={1000}
+                      onChange={(e) => handleXChange(e.target.value)}
+                      onBlur={handleXBlur}
+                      className="w-16 px-2 !text-xs h-7 rounded-sm text-center bg-panel-accent
+               [appearance:textfield]
+               [&::-webkit-outer-spin-button]:appearance-none
+               [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </PropertyItemValue>
+              </PropertyItem>
+              <PropertyItem direction="column">
+                <PropertyItemLabel>位置 Y</PropertyItemLabel>
+                <PropertyItemValue>
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      value={[element.y]}
+                      min={-500}
+                      max={500}
+                      step={1}
+                      onValueChange={([value]) => {
+                        updateTextElement(trackId, element.id, { y: value });
+                        setYInput(value.toString());
+                      }}
+                      className="w-full"
+                    />
+                    <Input
+                      type="number"
+                      value={yInput}
+                      min={-1000}
+                      max={1000}
+                      onChange={(e) => handleYChange(e.target.value)}
+                      onBlur={handleYBlur}
+                      className="w-16 px-2 !text-xs h-7 rounded-sm text-center bg-panel-accent
+               [appearance:textfield]
+               [&::-webkit-outer-spin-button]:appearance-none
+               [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </PropertyItemValue>
+              </PropertyItem>
+              <PropertyItem direction="column">
+                <PropertyItemLabel>旋转角度</PropertyItemLabel>
+                <PropertyItemValue>
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      value={[element.rotation]}
+                      min={-180}
+                      max={180}
+                      step={1}
+                      onValueChange={([value]) => {
+                        updateTextElement(trackId, element.id, { rotation: value });
+                        setRotationInput(value.toString());
+                      }}
+                      className="w-full"
+                    />
+                    <Input
+                      type="number"
+                      value={rotationInput}
+                      min={-360}
+                      max={360}
+                      onChange={(e) => handleRotationChange(e.target.value)}
+                      onBlur={handleRotationBlur}
+                      className="w-16 px-2 !text-xs h-7 rounded-sm text-center bg-panel-accent
+               [appearance:textfield]
+               [&::-webkit-outer-spin-button]:appearance-none
+               [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </PropertyItemValue>
+              </PropertyItem>
+            </div>
           ) : (
             <div className="space-y-6">
               <Textarea
