@@ -225,8 +225,8 @@ export function Captions() {
 
       // Calculate y position for bottom center (standard subtitle position)
       const captionY = activeProject?.canvasSize?.height
-        ? activeProject.canvasSize.height * 0.35 // ~80% from top
-        : 300; // Default for 1080p canvas
+        ? activeProject.canvasSize.height * 0.4 // ~90% from top, lower position
+        : 350; // Default for 1080p canvas
 
       // Add all caption elements to the same track
       for (let index = 0; index < shortCaptions.length; index++) {
@@ -237,9 +237,11 @@ export function Captions() {
           content: caption.text,
           duration: caption.duration,
           startTime: caption.startTime,
-          fontSize: 65,
+          fontSize: 48,
           fontWeight: "bold",
           y: captionY,
+          strokeColor: "#000000",
+          strokeWidth: 2,
         } as TextElement);
       }
 
