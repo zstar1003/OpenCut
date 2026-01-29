@@ -57,6 +57,24 @@ export default function EditorClient() {
         return;
       }
 
+      // 处理 "new" 特殊路由 - 创建新项目并重定向
+      if (projectId === "new") {
+        if (isInitializingRef.current) return;
+        isInitializingRef.current = true;
+
+        try {
+          const newProjectId = await createNewProject("未命名项目");
+          if (!isCancelled) {
+            // 使用 replace 避免浏览器历史中出现 /editor/new
+            router.replace(`/editor/${newProjectId}`);
+          }
+        } catch (error) {
+          console.error("Failed to create new project:", error);
+        }
+        isInitializingRef.current = false;
+        return;
+      }
+
       // Prevent duplicate initialization
       if (isInitializingRef.current) {
         return;
