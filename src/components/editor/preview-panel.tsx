@@ -69,75 +69,85 @@ export function PreviewPanel() {
     elementHeight: 0,
   });
 
+  const computeSize = useCallback((): { width: number; height: number } | null => {
+    if (!containerRef.current) return null;
+
+    let availableWidth, availableHeight;
+
+    if (isExpanded) {
+      const controlsHeight = 80;
+      const marginSpace = 24;
+      availableWidth = window.innerWidth - marginSpace;
+      availableHeight = window.innerHeight - controlsHeight - marginSpace;
+    } else {
+      const container = containerRef.current.getBoundingClientRect();
+      if (container.width === 0 || container.height === 0) return null;
+
+      const computedStyle = getComputedStyle(containerRef.current);
+      const paddingTop = parseFloat(computedStyle.paddingTop);
+      const paddingBottom = parseFloat(computedStyle.paddingBottom);
+      const paddingLeft = parseFloat(computedStyle.paddingLeft);
+      const paddingRight = parseFloat(computedStyle.paddingRight);
+      const gap = parseFloat(computedStyle.gap) || 16;
+      const toolbar = containerRef.current.querySelector("[data-toolbar]");
+      const toolbarHeight = toolbar
+        ? toolbar.getBoundingClientRect().height
+        : 0;
+
+      availableWidth = container.width - paddingLeft - paddingRight;
+      availableHeight =
+        container.height -
+        paddingTop -
+        paddingBottom -
+        toolbarHeight -
+        (toolbarHeight > 0 ? gap : 0);
+    }
+
+    if (availableWidth <= 0 || availableHeight <= 0) return null;
+
+    const targetRatio = canvasSize.width / canvasSize.height;
+    const containerRatio = availableWidth / availableHeight;
+    let width, height;
+
+    if (containerRatio > targetRatio) {
+      height = availableHeight * (isExpanded ? 0.95 : 1);
+      width = height * targetRatio;
+    } else {
+      width = availableWidth * (isExpanded ? 0.95 : 1);
+      height = width / targetRatio;
+    }
+
+    return { width, height };
+  }, [canvasSize.width, canvasSize.height, isExpanded]);
+
+  // Immediately recompute when canvasSize changes (no delay needed, container hasn't changed)
+  useEffect(() => {
+    const size = computeSize();
+    if (size) setPreviewDimensions(size);
+  }, [canvasSize.width, canvasSize.height, computeSize]);
+
+  // Handle isExpanded changes: wait for layout to settle with rAF
+  useEffect(() => {
+    const rafId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const size = computeSize();
+        if (size) setPreviewDimensions(size);
+      });
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [isExpanded, computeSize]);
+
+  // ResizeObserver: debounced to avoid intermediate sizes during layout transitions
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const computeSize = (): { width: number; height: number } | null => {
-      if (!containerRef.current) return null;
-
-      let availableWidth, availableHeight;
-
-      if (isExpanded) {
-        const controlsHeight = 80;
-        const marginSpace = 24;
-        availableWidth = window.innerWidth - marginSpace;
-        availableHeight = window.innerHeight - controlsHeight - marginSpace;
-      } else {
-        const container = containerRef.current.getBoundingClientRect();
-        if (container.width === 0 || container.height === 0) return null;
-
-        const computedStyle = getComputedStyle(containerRef.current);
-        const paddingTop = parseFloat(computedStyle.paddingTop);
-        const paddingBottom = parseFloat(computedStyle.paddingBottom);
-        const paddingLeft = parseFloat(computedStyle.paddingLeft);
-        const paddingRight = parseFloat(computedStyle.paddingRight);
-        const gap = parseFloat(computedStyle.gap) || 16;
-        const toolbar = containerRef.current.querySelector("[data-toolbar]");
-        const toolbarHeight = toolbar
-          ? toolbar.getBoundingClientRect().height
-          : 0;
-
-        availableWidth = container.width - paddingLeft - paddingRight;
-        availableHeight =
-          container.height -
-          paddingTop -
-          paddingBottom -
-          toolbarHeight -
-          (toolbarHeight > 0 ? gap : 0);
-      }
-
-      if (availableWidth <= 0 || availableHeight <= 0) return null;
-
-      const targetRatio = canvasSize.width / canvasSize.height;
-      const containerRatio = availableWidth / availableHeight;
-      let width, height;
-
-      if (containerRatio > targetRatio) {
-        height = availableHeight * (isExpanded ? 0.95 : 1);
-        width = height * targetRatio;
-      } else {
-        width = availableWidth * (isExpanded ? 0.95 : 1);
-        height = width / targetRatio;
-      }
-
-      return { width, height };
-    };
-
-    const applySize = () => {
-      const size = computeSize();
-      if (size) setPreviewDimensions(size);
-    };
-
-    // Debounced handler for ResizeObserver to avoid intermediate sizes
     const debouncedApplySize = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(applySize, 50);
+      debounceTimer = setTimeout(() => {
+        const size = computeSize();
+        if (size) setPreviewDimensions(size);
+      }, 50);
     };
-
-    // Initial: wait for layout to settle after isExpanded changes
-    const rafId = requestAnimationFrame(() => {
-      requestAnimationFrame(applySize);
-    });
 
     const resizeObserver = new ResizeObserver(debouncedApplySize);
     if (containerRef.current) {
@@ -148,14 +158,13 @@ export function PreviewPanel() {
     }
 
     return () => {
-      cancelAnimationFrame(rafId);
       if (debounceTimer) clearTimeout(debounceTimer);
       resizeObserver.disconnect();
       if (isExpanded) {
         window.removeEventListener("resize", debouncedApplySize);
       }
     };
-  }, [canvasSize.width, canvasSize.height, isExpanded]);
+  }, [isExpanded, computeSize]);
 
   useEffect(() => {
     const handleEscapeKey = (event: KeyboardEvent) => {
@@ -230,14 +239,17 @@ export function PreviewPanel() {
     };
   }, [dragState, previewDimensions, canvasSize, updateTextElement]);
 
-  // Clear the frame cache when background settings or tracks change since they affect rendering
+  // Clear the frame cache when background settings, tracks, or canvas size change since they affect rendering
   useEffect(() => {
     invalidateCache();
+    lastFrameTimeRef.current = -Infinity;
   }, [
     mediaFiles,
     tracks,
     activeProject?.backgroundColor,
     activeProject?.backgroundType,
+    canvasSize.width,
+    canvasSize.height,
     invalidateCache,
   ]);
 
@@ -479,6 +491,15 @@ export function PreviewPanel() {
       // Set canvas internal resolution to avoid blurry scaling
       const displayWidth = Math.max(1, Math.floor(previewDimensions.width));
       const displayHeight = Math.max(1, Math.floor(previewDimensions.height));
+
+      // Skip draw if previewDimensions aspect ratio doesn't match canvasSize
+      // (happens transiently when canvasSize changed but previewDimensions hasn't updated yet)
+      const previewRatio = displayWidth / displayHeight;
+      const canvasRatio = canvasSize.width / canvasSize.height;
+      if (Math.abs(previewRatio - canvasRatio) > 0.01) {
+        return;
+      }
+
       if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
         canvas.width = displayWidth;
         canvas.height = displayHeight;
