@@ -30,6 +30,45 @@ let transcriberLoading = false;
 let transcriberLoadPromise: Promise<any> | null = null;
 let currentModelId: string | null = null;
 
+// 过滤无用字幕内容的函数
+const filterCaptionText = (text: string): string | null => {
+  if (!text) return null;
+
+  const trimmed = text.trim();
+
+  // 过滤太短的内容（单个字符或空白）
+  if (trimmed.length < 2) return null;
+
+  // 过滤音乐/视频元数据模式
+  const metadataPatterns = [
+    /^[\(（\[【]?(?:編曲|编曲|作詞|作词|作曲|字幕|翻译|翻譯|混音|制作|製作|监制|監制|配音|演唱|原唱|歌词|歌詞|MV|导演|導演|摄影|攝影|剪辑|剪輯)[:：]?.+[\)）\]】]?$/i,
+    /^[\(（\[【].+[:：].+[\)）\]】]$/, // 括号内带冒号的内容
+    /^(?:词|曲|编|混|制|唱)[:：]/,
+    /^[A-Za-z\s]+[:：]/, // 英文名字后跟冒号
+    /^♪+$|^♫+$|^🎵+$/, // 纯音乐符号
+    /^\[.*\]$/, // 方括号内容 [Music] 等
+    /^[\(（].*[\)）]$/, // 仅括号内容
+  ];
+
+  for (const pattern of metadataPatterns) {
+    if (pattern.test(trimmed)) {
+      console.log("Filtered metadata:", trimmed);
+      return null;
+    }
+  }
+
+  // 移除文本中的内嵌元数据（但保留其他内容）
+  let cleaned = trimmed
+    .replace(/[\(（\[【][^）\)】\]]*(?:編曲|编曲|作詞|作词|作曲|字幕|翻译|翻譯|混音|制作|製作)[^）\)】\]]*[\)）\]】]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // 过滤清理后太短的内容
+  if (cleaned.length < 2) return null;
+
+  return cleaned;
+};
+
 export function Captions() {
   // Default to Chinese
   const [selectedCountry, setSelectedCountry] = useState("chinese");
@@ -42,18 +81,20 @@ export function Captions() {
   const { insertTrackAt, addElementToTrack } = useTimelineStore();
   const activeProject = useProjectStore((s) => s.activeProject);
 
-  // Use whisper-small - medium is too large for browser memory
-  const modelId = "Xenova/whisper-small";
+  // 模型配置 - 使用 distil-whisper-large-v3（蒸馏版）
+  // 准确度接近 large-v3，但体积更小（~750MB），适合浏览器运行
+  const modelId = "Xenova/distil-whisper-large-v3";
+  // 备用模型（如果内存不足则回退到更小的模型）
+  const fallbackModelId = "Xenova/whisper-small";
 
   // Track the highest progress value to prevent progress bar from going backwards
   const maxProgressRef = useRef(0);
 
   const loadTranscriber = useCallback(async () => {
     // If model changed, reset the instance
-    if (currentModelId !== modelId) {
+    if (currentModelId !== modelId && currentModelId !== fallbackModelId) {
       transcriberInstance = null;
       transcriberLoadPromise = null;
-      currentModelId = modelId;
     }
 
     if (transcriberInstance) {
@@ -76,33 +117,77 @@ export function Captions() {
 
         // 配置 transformers.js 环境
         if (env) {
-          // 禁用本地模型缓存检查，直接从 CDN 加载
           env.allowLocalModels = false;
-          // 使用默认的 Hugging Face CDN
           env.useBrowserCache = true;
         }
 
-        console.log("Loading Whisper model:", modelId);
-
-        const transcriber = await pipeline(
-          "automatic-speech-recognition",
-          modelId,
-          {
-            progress_callback: (progress: any) => {
-              if (progress.status === "downloading" || progress.status === "progress") {
-                const percent = progress.progress || 0;
-                // Only update if progress increased (prevents jumping backwards)
-                if (percent > maxProgressRef.current) {
-                  maxProgressRef.current = percent;
-                  setModelProgress(Math.round(percent));
-                }
-              } else if (progress.status === "ready" || progress.status === "done") {
-                maxProgressRef.current = 100;
-                setModelProgress(100);
-              }
-            },
+        const progressCallback = (progress: any) => {
+          if (progress.status === "downloading" || progress.status === "progress") {
+            const percent = progress.progress || 0;
+            if (percent > maxProgressRef.current) {
+              maxProgressRef.current = percent;
+              setModelProgress(Math.round(percent));
+            }
+          } else if (progress.status === "ready" || progress.status === "done") {
+            maxProgressRef.current = 100;
+            setModelProgress(100);
           }
-        );
+        };
+
+        // 尝试加载模型，如果 HuggingFace 不可用则尝试 HF 镜像
+        const tryLoadModel = async (model: string) => {
+          // 首先尝试默认源（HuggingFace）
+          try {
+            console.log(`尝试从 HuggingFace 加载模型: ${model}`);
+            if (env) {
+              env.remoteHost = "https://huggingface.co";
+              env.remotePathTemplate = "{model}/resolve/{revision}/";
+            }
+            return await pipeline("automatic-speech-recognition", model, {
+              progress_callback: progressCallback,
+            });
+          } catch (hfError) {
+            console.warn("HuggingFace 加载失败，尝试 HF 镜像...", hfError);
+
+            // 尝试 HF 镜像（适用于中国大陆用户）
+            try {
+              maxProgressRef.current = 0;
+              setModelProgress(0);
+              if (env) {
+                env.remoteHost = "https://hf-mirror.com";
+                env.remotePathTemplate = "{model}/resolve/{revision}/";
+              }
+              console.log(`尝试从 HF 镜像加载模型: ${model}`);
+              return await pipeline("automatic-speech-recognition", model, {
+                progress_callback: progressCallback,
+              });
+            } catch (mirrorError) {
+              console.warn("HF 镜像加载失败", mirrorError);
+              throw mirrorError;
+            }
+          }
+        };
+
+        // 尝试加载主模型
+        let transcriber;
+        try {
+          console.log("加载 ASR 模型:", modelId);
+          transcriber = await tryLoadModel(modelId);
+          currentModelId = modelId;
+        } catch (primaryError) {
+          // 如果主模型加载失败，尝试备用模型
+          console.warn(`主模型 ${modelId} 加载失败，尝试备用模型...`, primaryError);
+          maxProgressRef.current = 0;
+          setModelProgress(0);
+
+          try {
+            console.log("加载备用模型:", fallbackModelId);
+            transcriber = await tryLoadModel(fallbackModelId);
+            currentModelId = fallbackModelId;
+          } catch (fallbackError) {
+            throw new Error(`模型加载失败。请检查网络连接，或尝试使用 VPN 访问。`);
+          }
+        }
 
         transcriberInstance = transcriber;
         return transcriber;
@@ -117,7 +202,7 @@ export function Captions() {
     })();
 
     return transcriberLoadPromise;
-  }, [modelId]);
+  }, []);
 
   const handleGenerateTranscript = async () => {
     try {
@@ -138,15 +223,14 @@ export function Captions() {
 
       setProcessingStep("正在识别语音（这可能需要几分钟）...");
 
-      // Always pass the selected language explicitly for better accuracy
-      console.log("Transcription language:", selectedCountry);
+      console.log("Transcription model:", currentModelId, "language:", selectedCountry);
 
-      // Pass the blob URL directly - let transformers.js handle the decoding
+      // Whisper 模型参数
       const result = await transcriber(audioUrl, {
         return_timestamps: true,
         chunk_length_s: 30,
         stride_length_s: 5,
-        language: selectedCountry, // Always specify language
+        language: selectedCountry,
         task: "transcribe",
       });
 
@@ -168,31 +252,58 @@ export function Captions() {
       // Handle chunks with timestamps from transformers.js
       if (result.chunks && Array.isArray(result.chunks)) {
         for (const chunk of result.chunks) {
-          const text = chunk.text?.trim();
-          if (!text) continue;
+          const rawText = chunk.text?.trim();
+          if (!rawText) continue;
+
+          // 过滤无用内容
+          const filteredText = filterCaptionText(rawText);
+          if (!filteredText) continue;
 
           const startTime = chunk.timestamp?.[0] ?? globalEndTime;
           const endTime = chunk.timestamp?.[1] ?? startTime + 2;
           const duration = Math.max(0.8, endTime - startTime);
 
-          // Split long chunks into smaller pieces (2-4 words)
-          const words = text.split(/\s+/);
-          const chunks: string[] = [];
-          for (let i = 0; i < words.length; i += 3) {
-            chunks.push(words.slice(i, i + 3).join(" "));
+          // 对于中文，按字符分割；对于其他语言，按空格分割
+          const isChinese = /[\u4e00-\u9fff]/.test(filteredText);
+          let textChunks: string[] = [];
+
+          if (isChinese) {
+            // 中文：每 4-6 个字符一组
+            const chars = filteredText.replace(/\s+/g, "");
+            const chunkSize = 5;
+            for (let i = 0; i < chars.length; i += chunkSize) {
+              const chunk = chars.slice(i, i + chunkSize);
+              if (chunk.length > 0) {
+                textChunks.push(chunk);
+              }
+            }
+          } else {
+            // 其他语言：按空格分割，每 3 个词一组
+            const words = filteredText.split(/\s+/);
+            for (let i = 0; i < words.length; i += 3) {
+              textChunks.push(words.slice(i, i + 3).join(" "));
+            }
           }
 
-          const chunkDuration = duration / chunks.length;
+          if (textChunks.length === 0) {
+            textChunks = [filteredText];
+          }
+
+          const chunkDuration = duration / textChunks.length;
           let chunkStartTime = startTime;
 
-          for (const chunkText of chunks) {
+          for (const chunkText of textChunks) {
+            // 再次过滤每个小块
+            const finalText = filterCaptionText(chunkText);
+            if (!finalText) continue;
+
             let adjustedStartTime = chunkStartTime;
             if (adjustedStartTime < globalEndTime) {
               adjustedStartTime = globalEndTime;
             }
 
             shortCaptions.push({
-              text: chunkText,
+              text: finalText,
               startTime: adjustedStartTime,
               duration: Math.max(0.8, chunkDuration),
             });
@@ -203,18 +314,41 @@ export function Captions() {
         }
       } else if (result.text) {
         // Fallback for simple text output without timestamps
-        const words = result.text.trim().split(/\s+/);
-        const wordsPerChunk = 3;
-        const defaultDuration = 2;
+        const filteredText = filterCaptionText(result.text);
+        if (filteredText) {
+          const isChinese = /[\u4e00-\u9fff]/.test(filteredText);
+          const defaultDuration = 2;
 
-        for (let i = 0; i < words.length; i += wordsPerChunk) {
-          const chunkText = words.slice(i, i + wordsPerChunk).join(" ");
-          shortCaptions.push({
-            text: chunkText,
-            startTime: globalEndTime,
-            duration: defaultDuration,
-          });
-          globalEndTime += defaultDuration;
+          if (isChinese) {
+            const chars = filteredText.replace(/\s+/g, "");
+            const chunkSize = 5;
+            for (let i = 0; i < chars.length; i += chunkSize) {
+              const chunk = chars.slice(i, i + chunkSize);
+              const finalText = filterCaptionText(chunk);
+              if (finalText) {
+                shortCaptions.push({
+                  text: finalText,
+                  startTime: globalEndTime,
+                  duration: defaultDuration,
+                });
+                globalEndTime += defaultDuration;
+              }
+            }
+          } else {
+            const words = filteredText.split(/\s+/);
+            for (let i = 0; i < words.length; i += 3) {
+              const chunkText = words.slice(i, i + 3).join(" ");
+              const finalText = filterCaptionText(chunkText);
+              if (finalText) {
+                shortCaptions.push({
+                  text: finalText,
+                  startTime: globalEndTime,
+                  duration: defaultDuration,
+                });
+                globalEndTime += defaultDuration;
+              }
+            }
+          }
         }
       }
 
@@ -279,7 +413,7 @@ export function Captions() {
             <span>在浏览器本地运行</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            首次使用需下载约 500MB 的 AI 模型。模型会缓存在浏览器中，您的音频不会离开您的设备。
+            使用 distil-whisper-large-v3 模型（蒸馏版），准确度高且内存友好。首次使用需下载约 750MB 模型文件。支持 HF 镜像自动切换。
           </p>
         </div>
       </div>

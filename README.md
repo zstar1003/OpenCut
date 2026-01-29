@@ -5,7 +5,7 @@
 <h1 align="center"><b>速剪</b></h1>
 
 <p align="center">
-  一款快速剪辑和字幕识别工具。
+  一款基于[OpenCut](https://github.com/OpenCut-app/OpenCut)的快速剪辑和字幕识别工具。
 </p>
 
 <p align="center">
