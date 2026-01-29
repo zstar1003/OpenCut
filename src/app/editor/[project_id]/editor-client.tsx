@@ -57,19 +57,48 @@ export default function EditorClient() {
         return;
       }
 
-      // 处理 "new" 特殊路由 - 创建新项目并重定向
+      // 处理 "new" 特殊路由
       if (projectId === "new") {
         if (isInitializingRef.current) return;
         isInitializingRef.current = true;
 
         try {
+          // 检查是否有待加载的项目 ID（从 404 重定向来的）
+          const pendingId = sessionStorage.getItem("pendingProjectId");
+          sessionStorage.removeItem("pendingProjectId");
+
+          const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+          if (pendingId) {
+            // 尝试加载已有项目
+            try {
+              await loadProject(pendingId);
+              if (!isCancelled) {
+                window.history.replaceState(
+                  null,
+                  "",
+                  `${basePath}/editor/${pendingId}`
+                );
+              }
+              isInitializingRef.current = false;
+              return;
+            } catch {
+              // 项目不存在，创建新项目
+              console.log("Pending project not found, creating new one");
+            }
+          }
+
+          // 创建新项目
           const newProjectId = await createNewProject("未命名项目");
           if (!isCancelled) {
-            // 使用 replace 避免浏览器历史中出现 /editor/new
-            router.replace(`/editor/${newProjectId}`);
+            window.history.replaceState(
+              null,
+              "",
+              `${basePath}/editor/${newProjectId}`
+            );
           }
         } catch (error) {
-          console.error("Failed to create new project:", error);
+          console.error("Failed to initialize project:", error);
         }
         isInitializingRef.current = false;
         return;
