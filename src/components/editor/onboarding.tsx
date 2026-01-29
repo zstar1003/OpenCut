@@ -59,16 +59,7 @@ export function Onboarding() {
                 导入媒体文件、编辑时间轴、使用 AI 驱动的字幕功能 - 所有处理都在您的设备本地完成。
               </Description>
               <Description>
-                加入我们的{" "}
-                <a
-                  href="https://discord.gg/zmR9N35cjK"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-foreground hover:text-foreground/80 underline"
-                >
-                  Discord
-                </a>{" "}
-                分享反馈。
+                如有问题，可通过顶部菜单的「微信公众号」联系开发者。
               </Description>
             </div>
             <NextButton onClick={handleClose}>开始使用</NextButton>

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "../ui/button";
-import { ChevronDown, SquarePen } from "lucide-react";
+import { ChevronDown, SquarePen, MessageCircle } from "lucide-react";
 import { HeaderBase } from "../header-base";
 import { useProjectStore } from "@/stores/project-store";
 import { KeyboardShortcutsHelp } from "../keyboard-shortcuts-help";
@@ -13,8 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import Link from "next/link";
-import { FaDiscord } from "react-icons/fa6";
 import { PanelPresetSelector } from "./panel-preset-selector";
 import { ExportButton } from "./export-button";
 import { ThemeToggle } from "../theme-toggle";
@@ -31,6 +29,7 @@ import { Input } from "../ui/input";
 export function EditorHeader() {
   const { activeProject, renameProject } = useProjectStore();
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+  const [isWechatDialogOpen, setIsWechatDialogOpen] = useState(false);
   const [newName, setNewName] = useState("");
 
   const handleNameSave = async () => {
@@ -70,16 +69,12 @@ export function EditorHeader() {
             重命名项目
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link
-              href="https://discord.gg/zmR9N35cjK"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5"
-            >
-              <FaDiscord className="h-4 w-4" />
-              Discord
-            </Link>
+          <DropdownMenuItem
+            className="flex items-center gap-1.5"
+            onClick={() => setIsWechatDialogOpen(true)}
+          >
+            <MessageCircle className="h-4 w-4" />
+            微信公众号
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -108,6 +103,24 @@ export function EditorHeader() {
             </Button>
             <Button onClick={handleNameSave}>保存</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isWechatDialogOpen} onOpenChange={setIsWechatDialogOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>微信公众号</DialogTitle>
+            <DialogDescription>
+              如有问题，可通过公众号联系开发者
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center py-4">
+            <img
+              src="/wechat.webp"
+              alt="微信公众号二维码"
+              className="w-48 h-48 object-contain rounded-lg"
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>
