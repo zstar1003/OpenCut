@@ -207,23 +207,22 @@ export function PreviewPanel() {
     if (dragState.isDragging) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "grabbing";
       document.body.style.userSelect = "none";
     }
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
   }, [dragState, previewDimensions, canvasSize, updateTextElement]);
 
-  // Clear the frame cache when background settings change since they affect rendering
+  // Clear the frame cache when background settings or tracks change since they affect rendering
   useEffect(() => {
     invalidateCache();
   }, [
     mediaFiles,
+    tracks,
     activeProject?.backgroundColor,
     activeProject?.backgroundType,
     invalidateCache,
@@ -633,36 +632,42 @@ export function PreviewPanel() {
     const centerX = previewDimensions.width / 2;
     const centerY = previewDimensions.height / 2;
 
+    const isDraggingThis = dragState.isDragging && dragState.elementId === element.id;
+
     // Use drag state position if currently dragging this element
-    const currentX = dragState.isDragging && dragState.elementId === element.id
-      ? dragState.currentX
-      : textElement.x;
-    const currentY = dragState.isDragging && dragState.elementId === element.id
-      ? dragState.currentY
-      : textElement.y;
+    const currentX = isDraggingThis ? dragState.currentX : textElement.x;
+    const currentY = isDraggingThis ? dragState.currentY : textElement.y;
 
     const left = centerX + currentX * scaleRatio;
     const top = centerY + currentY * scaleRatio;
 
     // Estimate text size for the overlay
     const fontSize = textElement.fontSize * scaleRatio;
-    const estimatedWidth = textElement.content.length * fontSize * 0.6;
-    const estimatedHeight = fontSize * 1.2;
+    const estimatedWidth = Math.max(textElement.content.length * fontSize * 0.6, 50);
+    const estimatedHeight = Math.max(fontSize * 1.2, 20);
 
     return (
       <div
         key={element.id}
-        className="absolute cursor-grab active:cursor-grabbing"
+        className="absolute"
         style={{
           left: left - estimatedWidth / 2,
           top: top - estimatedHeight / 2,
           width: estimatedWidth,
           height: estimatedHeight,
-          // Debug: uncomment to see overlay
-          // backgroundColor: 'rgba(255,0,0,0.2)',
         }}
         onMouseDown={(e) => handleTextMouseDown(e, textElement, track.id)}
-      />
+      >
+        {/* Ghost/shadow effect when dragging */}
+        {isDraggingThis && (
+          <div
+            className="absolute inset-0 rounded border-2 border-dashed border-primary/60 bg-primary/10"
+            style={{
+              boxShadow: '0 0 0 1px rgba(var(--primary), 0.3)',
+            }}
+          />
+        )}
+      </div>
     );
   };
 

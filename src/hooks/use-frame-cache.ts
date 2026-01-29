@@ -53,8 +53,13 @@ export function useFrameCache(options: FrameCacheOptions = {}) {
         content?: string;
         fontSize?: number;
         fontFamily?: string;
+        fontWeight?: string;
+        fontStyle?: string;
+        textDecoration?: string;
         color?: string;
         backgroundColor?: string;
+        strokeColor?: string;
+        strokeWidth?: number;
         x?: number;
         y?: number;
         rotation?: number;
@@ -98,8 +103,13 @@ export function useFrameCache(options: FrameCacheOptions = {}) {
                 content: textElement.content,
                 fontSize: textElement.fontSize,
                 fontFamily: textElement.fontFamily,
+                fontWeight: textElement.fontWeight,
+                fontStyle: textElement.fontStyle,
+                textDecoration: textElement.textDecoration,
                 color: textElement.color,
                 backgroundColor: textElement.backgroundColor,
+                strokeColor: textElement.strokeColor,
+                strokeWidth: textElement.strokeWidth,
                 x: textElement.x,
                 y: textElement.y,
                 rotation: textElement.rotation,
