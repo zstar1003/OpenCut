@@ -5,8 +5,8 @@
     <title>速剪</title>
     <script type="text/javascript">
       // GitHub Pages SPA 重定向脚本
-      // 将 404 路径转换为查询参数，然后重定向到首页
-      var pathSegmentsToKeep = 0;
+      // 处理 /FlashCut 子路径部署
+      var pathSegmentsToKeep = 1; // 保留 /FlashCut 这一段
 
       var l = window.location;
       l.replace(
