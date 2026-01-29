@@ -1,13 +1,23 @@
 import type { NextConfig } from "next";
 
+const isGitHubPages = process.env.GITHUB_PAGES === "true";
+
 const nextConfig: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
   reactStrictMode: true,
   productionBrowserSourceMaps: true,
-  output: "standalone",
+  // GitHub Pages 需要静态导出，其他环境使用 standalone
+  output: isGitHubPages ? "export" : "standalone",
+  // GitHub Pages 部署时需要设置 basePath（如果不是自定义域名）
+  basePath: isGitHubPages ? process.env.NEXT_PUBLIC_BASE_PATH || "" : "",
+  assetPrefix: isGitHubPages ? process.env.NEXT_PUBLIC_BASE_PATH || "" : "",
+  // 为 SPA 路由添加 trailingSlash
+  trailingSlash: isGitHubPages,
   images: {
+    // 静态导出不支持图片优化，需要使用 unoptimized
+    unoptimized: isGitHubPages,
     remotePatterns: [
       {
         protocol: "https",
