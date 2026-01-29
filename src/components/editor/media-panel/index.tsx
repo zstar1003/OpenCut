@@ -4,7 +4,6 @@ import { TabBar } from "./tabbar";
 import { MediaView } from "./views/media";
 import { useMediaPanelStore, Tab } from "./store";
 import { TextView } from "./views/text";
-import { StickersView } from "./views/stickers";
 import { Separator } from "@/components/ui/separator";
 import { SettingsView } from "./views/settings";
 import { Captions } from "./views/captions";
@@ -15,28 +14,7 @@ export function MediaPanel() {
   const viewMap: Record<Tab, React.ReactNode> = {
     media: <MediaView />,
     text: <TextView />,
-    stickers: <StickersView />,
-    effects: (
-      <div className="p-4 text-muted-foreground">
-        Effects view coming soon...
-      </div>
-    ),
-    transitions: (
-      <div className="p-4 text-muted-foreground">
-        Transitions view coming soon...
-      </div>
-    ),
     captions: <Captions />,
-    filters: (
-      <div className="p-4 text-muted-foreground">
-        Filters view coming soon...
-      </div>
-    ),
-    adjustment: (
-      <div className="p-4 text-muted-foreground">
-        Adjustment view coming soon...
-      </div>
-    ),
     settings: <SettingsView />,
   };
 

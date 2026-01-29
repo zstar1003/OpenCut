@@ -1,11 +1,6 @@
 import {
   CaptionsIcon,
-  ArrowLeftRightIcon,
-  SparklesIcon,
-  StickerIcon,
   VideoIcon,
-  BlendIcon,
-  SlidersHorizontalIcon,
   LucideIcon,
   TypeIcon,
   SettingsIcon,
@@ -15,12 +10,7 @@ import { create } from "zustand";
 export type Tab =
   | "media"
   | "text"
-  | "stickers"
-  | "effects"
-  | "transitions"
   | "captions"
-  | "filters"
-  | "adjustment"
   | "settings";
 
 export const tabs: { [key in Tab]: { icon: LucideIcon; label: string } } = {
@@ -32,29 +22,9 @@ export const tabs: { [key in Tab]: { icon: LucideIcon; label: string } } = {
     icon: TypeIcon,
     label: "文字",
   },
-  stickers: {
-    icon: StickerIcon,
-    label: "贴纸",
-  },
-  effects: {
-    icon: SparklesIcon,
-    label: "特效",
-  },
-  transitions: {
-    icon: ArrowLeftRightIcon,
-    label: "转场",
-  },
   captions: {
     icon: CaptionsIcon,
     label: "字幕",
-  },
-  filters: {
-    icon: BlendIcon,
-    label: "滤镜",
-  },
-  adjustment: {
-    icon: SlidersHorizontalIcon,
-    label: "调整",
   },
   settings: {
     icon: SettingsIcon,
